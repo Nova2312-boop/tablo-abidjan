@@ -1,0 +1,15 @@
+{
+  "name": "tablo-abidjan",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tablô Abidjan : réservation de restaurants (front + backend Node/PostgreSQL)",
+  "scripts": {
+    "start": "node server/server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "pg": "^8.23.1"
+  }
+}

@@ -1,0 +1,6 @@
+.env
+node_modules/
+pgdata/
+pgdata.log
+.pgpass.tmp
+*.log

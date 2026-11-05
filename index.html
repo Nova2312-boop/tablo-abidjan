@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="fr" data-theme="light">
+<head>
+  <script>/* Le site a besoin du backend : Live Server (5500) ou ouverture directe du fichier renvoient vers le bon serveur */ if(location.protocol==="file:"||((location.hostname==="localhost"||location.hostname==="127.0.0.1")&&location.port!=="3000"&&location.port!=="3002"))location.replace("http://localhost:3000/"+location.hash);</script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Tablô Abidjan</title>
+  <meta name="description" content="Réserve ta table dans les restaurants et maquis d'Abidjan.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="util"><div class="wrap">
+  <button type="button" data-go="inscription-resto">Pour les restaurants</button>
+  <button type="button" data-faq="1">FAQ</button>
+  <button type="button" id="themeBtn">Thème</button>
+  <span class="muted">FR · FCFA</span>
+</div></div>
+<header class="top">
+  <div class="wrap">
+    <a class="logo" href="#accueil" aria-label="Tablô, accueil">
+      <span class="logo-mark"></span>
+      <span><b>Tablô</b><small>Abidjan à table</small></span>
+    </a>
+    <div style="position:relative">
+      <button class="loc-btn" id="locBtn" aria-expanded="false" aria-haspopup="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 1 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+        <span id="locLabel">Abidjan</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="pop" id="locPop" hidden></div>
+    </div>
+    <nav class="tabs" aria-label="Navigation principale">
+      <a href="#accueil" data-view="accueil">Accueil</a>
+      <a href="#explorer" data-view="explorer">Explorer</a>
+      <a href="#compte" data-view="compte">Mon compte</a>
+    </nav>
+    <div class="hdr-acts">
+      <div class="hdr-guest" id="guestActs">
+        <button class="joinbtn" id="joinBtn" type="button">Rejoindre les récompenses</button>
+        <button class="signin" id="signBtn" type="button">Connexion</button>
+      </div>
+      <div class="hdr-user" id="userActs" hidden>
+        <div class="hp-wrap"><button class="ic-btn av-btn" type="button" data-hp="av" aria-label="Mon profil" aria-expanded="false"><span id="avIni">?</span><i class="hdot" id="avDot" hidden></i></button><div class="hpop" id="hp-av" hidden></div></div>
+        <div class="hp-wrap"><button class="ic-btn" type="button" data-hp="resa" aria-label="Réservations à venir" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></button><div class="hpop" id="hp-resa" hidden></div></div>
+        <div class="hp-wrap"><button class="ic-btn" type="button" data-hp="notif" aria-label="Notifications" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><i class="hdot" id="notifDot" hidden></i></button><div class="hpop" id="hp-notif" hidden></div></div>
+        <div class="hp-wrap"><button class="ic-btn" type="button" data-hp="gift" aria-label="Mes récompenses" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3.5" y="8" width="17" height="4" rx="1"/><path d="M5 12v8h14v-8M12 8v12M12 8c-2-4-6-4-6-1.5S10 8 12 8zm0 0c2-4 6-4 6-1.5S14 8 12 8z"/></svg></button><div class="hpop" id="hp-gift" hidden></div></div>
+      </div>
+      <span class="vsep" aria-hidden="true"></span>
+      <button class="ic-btn" id="searchBtn" type="button" aria-label="Rechercher"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg></button>
+    </div>
+  </div>
+</header>
+
+<main id="main"></main>
+
+<footer>
+  <div class="wrap">
+    <div class="f-cols">
+      <div><h4>Découvrir</h4><ul>
+        <li><button data-go="compte" data-tab="fidelite">Points fidélité</button></li>
+        <li><button data-coll="groupe">Privatiser une salle</button></li>
+        <li><button data-coll="top">Top Abidjan</button></li>
+        <li><button data-coll="soir">Ouverts ce soir</button></li>
+        <li><button data-coll="experiences">Expériences</button></li>
+        <li><button data-gift="1">Cartes cadeaux</button></li></ul></div>
+      <div><h4>Tablô</h4><ul><li>À propos</li><li>Blog des saveurs</li><li>Recrutement</li><li>Presse</li></ul></div>
+      <div><h4>Plus</h4><ul><li>Application Android</li><li>Application iOS</li><li>Programme partenaires</li><li>Service client : 27 22 00 00 00</li></ul></div>
+      <div><h4>Communes</h4><ul id="footCommunes"></ul></div>
+      <div><h4>Restaurateurs</h4><ul>
+        <li><button data-go="inscription-resto">Rejoindre Tablô</button></li>
+        <li><button data-go="pro">Gestion de salle</button></li>
+        <li><button data-go="pro" data-tab="cuisine">Pré-commandes</button></li>
+        <li><button data-go="pro" data-tab="cuisine">Anti-gaspillage</button></li>
+        <li><button data-go="pro" data-tab="stats">Statistiques</button></li>
+        <li>Tarifs : dès 15 000 F / mois</li></ul></div>
+    </div>
+    <div class="f-bottom"><span>Confidentialité</span><span>Conditions d'utilisation</span><span>Cookies</span><span>Accessibilité</span>
+      <span>Prototype pour le Hackathon Restauration Vatel × Epitech, Abidjan, 21 novembre 2026. Restaurants, avis et chiffres fictifs.</span></div>
+  </div>
+</footer>
+
+<dialog id="dlg"><div id="dlgInner"></div></dialog>
+
+<script src="js/data.js"></script>
+<script src="js/slots.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
