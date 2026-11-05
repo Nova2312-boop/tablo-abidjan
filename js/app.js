@@ -568,14 +568,9 @@ function logoutUser(){api("POST","/api/auth/logout").catch(()=>{}).finally(()=>{
 function openProfil(){
   openDlg("Bienvenue sur Tablô",`<div class="login"><h3>Tu viens pour quoi ?</h3>
     <button type="button" class="profil" id="pfClient"><b>Je veux réserver une table</b><span>Trouve un restaurant, réserve et cumule des points.</span></button>
-    <button type="button" class="profil" id="pfGerant"><b>Je gère un établissement</b><span>Restaurant, maquis ou lounge : reçois des réservations via Tablô.</span></button></div>`);
+    <button type="button" class="profil" id="pfGerant"><b>Je gère un établissement</b><span>Restaurant, maquis ou lounge : fais ta demande pour rejoindre Tablô.</span></button></div>`);
   $("#pfClient").onclick=()=>openLogin(false,true);
-  $("#pfGerant").onclick=()=>{openDlg("Espace restaurateur",`<div class="login"><h3>Ton établissement est-il déjà sur Tablô ?</h3>
-    <button type="button" class="profil" id="pfNew"><b>Pas encore</b><span>Fais ta demande : appel ou entretien avec notre équipe, puis création de ton accès.</span></button>
-    <button type="button" class="profil" id="pfOld"><b>Oui, j'ai déjà un compte</b><span>Connecte-toi avec ton e-mail et ton mot de passe.</span></button>
-    <button type="button" class="linkbtn lg-alt" id="pfBack">← Retour</button></div>`);
-    const go=h=>{dlg.close();if(location.hash==="#"+h)route();else location.hash=h};
-    $("#pfNew").onclick=()=>go("inscription-resto");$("#pfOld").onclick=()=>go("pro");$("#pfBack").onclick=openProfil};
+  $("#pfGerant").onclick=()=>{dlg.close();if(location.hash==="#inscription-resto")route();else location.hash="inscription-resto"};
 }
 function openLogin(join=false,retour=false){
   const L={mode:"tel",val:"",demo:"",signup:""};
@@ -837,12 +832,12 @@ function renderProRegister(){
       <label class="full">Message (facultatif)<textarea id="l_msg" rows="2" maxlength="800" placeholder="Le meilleur moment pour t'appeler, tes questions…"></textarea></label></div>
     <p class="err" id="rErr" role="alert" hidden></p>
     <button class="btn" id="rSend">Envoyer ma demande</button>
-    <p class="small muted" style="text-align:center">Déjà partenaire ? <a href="#pro">Se connecter</a></p>
+    <p class="small muted" style="text-align:center">Déjà partenaire ? <a href="#pro">Se connecter à mon espace</a></p>
     <a class="adm-back" href="#accueil">← Retour au site client</a></div></div>`;
   $("#plans").onclick=e=>{const b=e.target.closest("[data-plan]");if(!b)return;plan=b.dataset.plan;document.querySelectorAll("#plans .plan").forEach(x=>x.setAttribute("aria-pressed",x===b))};
   $("#rSend").onclick=async()=>{const err=$("#rErr"),b=$("#rSend");err.hidden=true;b.disabled=true;b.textContent="Envoi…";
     try{await api("POST","/api/pro/demande",{resto:$("#l_resto").value,type:$("#l_type").value,commune:$("#l_com").value,gerant:$("#l_nom").value,tables:$("#l_tables").value,tel:$("#l_tel").value,mail:$("#l_mail").value,message:$("#l_msg").value,plan});
-      document.querySelector(".reg-card").innerHTML=`<div class="confirm"><h2>Demande envoyée !</h2><p>Merci. L'équipe Tablô va te contacter pour un appel ou un entretien. Ton accès sera créé après cet échange.</p><a class="btn ghost" href="#accueil">Retour au site</a></div>`}
+      document.querySelector(".reg-card").innerHTML=`<div class="confirm"><h2>Demande envoyée !</h2><p>Merci. Il n'y a plus rien à faire de ton côté : l'équipe Tablô va t'appeler pour fixer ton rendez-vous (appel ou entretien).</p><p class="small muted">Ton accès à l'espace restaurateur sera créé après ce rendez-vous. Tu le recevras par e-mail.</p><a class="btn ghost" href="#accueil">Retour au site</a></div>`}
     catch(e){b.disabled=false;b.textContent="Envoyer ma demande";err.textContent=e.message;err.hidden=false}};
 }
 /* ---------- Activation du compte gérant ---------- */
