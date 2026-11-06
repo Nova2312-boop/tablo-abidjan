@@ -22,7 +22,10 @@ const longDate=s=>new Date(s+"T12:00").toLocaleDateString("fr-FR",{weekday:"long
 const hm=t=>t.replace(":","h");
 const byId=id=>R.find(r=>r.id===id);
 const hues=r=>HUES[hash(r.id)%HUES.length];
-function coverBg(r,seed=""){if(!seed&&r.photos&&r.photos.length)return `background:center/cover no-repeat url(/api/photos/${+r.photos[0]})`;const [a,b]=HUES[hash(r.id+seed)%HUES.length];return `background:repeating-linear-gradient(115deg,${a} 0 22px,${a}e6 22px 30px,${b} 30px 36px,${a} 36px 58px),${a}`}
+const photoDemo=r=>r.demo&&!(r.photos&&r.photos.length)&&PHOTOS_DEMO[r.id]?"img/photos/"+r.id+".jpg":null;
+const aPhoto=r=>!!((r.photos&&r.photos.length)||photoDemo(r));
+function coverBg(r,seed=""){if(!seed&&r.photos&&r.photos.length)return `background:center/cover no-repeat url(/api/photos/${+r.photos[0]})`;
+  if(!seed&&photoDemo(r))return `background:linear-gradient(180deg,rgba(0,0,0,.28),rgba(0,0,0,0) 45%),center/cover no-repeat url(${photoDemo(r)})`;const [a,b]=HUES[hash(r.id+seed)%HUES.length];return `background:repeating-linear-gradient(115deg,${a} 0 22px,${a}e6 22px 30px,${b} 30px 36px,${a} 36px 58px),${a}`}
 const ini=n=>n.replace(/^(Le|La|Les|Chez|Maison|Café)\s+/i,"").split(/[\s']+/).filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join("");
 const price=b=>`<span aria-label="Budget ${b} sur 4">${"F".repeat(b)}<span style="opacity:.3">${"F".repeat(4-b)}</span></span>`;
 const heart=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>`;
@@ -83,7 +86,7 @@ function sansResa(r){return canOrder(r)&&!!r.commande.seul}
 function card(r,opts={}){
   const s=slotsFor(r);const booked=6+hash(r.id+st.date)%42;
   return `<article class="card" data-rid="${r.id}" tabindex="0" aria-label="${esc(r.n)}">
-    <div class="cover" style="${coverBg(r)}"><span class="badge ${r.nouv?"new":""}">${r.nouv?"Nouveau":r.t}</span><span class="ini">${ini(r.n)}</span>
+    <div class="cover" style="${coverBg(r)}"><span class="badge ${r.nouv?"new":""}">${r.nouv?"Nouveau":r.t}</span>${aPhoto(r)?"":`<span class="ini">${ini(r.n)}</span>`}
       <button class="fav" data-fav="${r.id}" aria-pressed="${favs.has(r.id)}" aria-label="Ajouter aux favoris">${heart}</button></div>
     <div class="card-body">
       <h3>${esc(r.n)}</h3>
@@ -355,7 +358,7 @@ function renderResto(id){
       <div class="r-sec" data-sec="Menu"><h2>Menu</h2><p class="muted small" style="margin-bottom:12px">Prix en FCFA, mis à jour par le restaurant. ${sansResa(r)?"Commande-les à emporter ou en livraison.":canOrder(r)?"Commande-les à emporter ou en livraison, ou pré-commande-les en réservant.":"Tu peux pré-commander ces plats en réservant."}</p>
         <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">${Object.entries(menu).map(([cat,items])=>`<div class="menu-cat"><h3>${cat}</h3>${items.map(([n,p,d])=>`<div class="menu-item"><span>${n}${d?`<small>${d}</small>`:""}</span><b class="num">${p?F(p):"Offert"}</b></div>`).join("")}</div>`).join("")}</div></div>
       ${offresHtml(offres.filter(o=>o.rid===r.id),"Anti-gaspi ce soir","Plats restants à -40 %, à retirer et payer sur place.",true)}
-      <div class="r-sec" data-sec="Photos"><h2>Photos</h2>${r.photos&&r.photos.length?`<div class="photos">${r.photos.map(id=>`<div style="background:center/cover no-repeat url(/api/photos/${+id})"></div>`).join("")}</div>`:r.demo?`<div class="photos">${["Salle","Terrasse","Plat signature","Bar","Équipe","Dessert","Vue","Cuisine"].map((p,i)=>`<div style="${coverBg(r,"ph"+i)}">${p}</div>`).join("")}</div>`:`<p class="muted">Pas encore de photos.</p>`}</div>
+      <div class="r-sec" data-sec="Photos"><h2>Photos</h2>${r.photos&&r.photos.length?`<div class="photos">${r.photos.map(id=>`<div style="background:center/cover no-repeat url(/api/photos/${+id})"></div>`).join("")}</div>`:photoDemo(r)?`<div class="photos"><div style="background:center/cover no-repeat url(${photoDemo(r)})"></div></div><p class="small muted" style="margin-top:8px">Établissement d'exemple. Photo d'illustration : <a href="${esc(PHOTOS_DEMO[r.id].u)}" target="_blank" rel="noopener">${esc(PHOTOS_DEMO[r.id].a)}</a>, licence ${esc(PHOTOS_DEMO[r.id].l)}, via Wikimedia Commons.</p>`:r.demo?`<div class="photos">${["Salle","Terrasse","Plat signature","Bar","Équipe","Dessert","Vue","Cuisine"].map((p,i)=>`<div style="${coverBg(r,"ph"+i)}">${p}</div>`).join("")}</div>`:`<p class="muted">Pas encore de photos.</p>`}</div>
       <div class="r-sec" data-sec="Avis"><h2>Ce que disent ${(r.avis||0).toLocaleString("fr-FR")} clients</h2>
         <div class="rating-sum"><div><div class="big-note num">${noteTxt(r)}</div><div class="stars">★★★★★</div><div class="small muted">Avis de clients venus avec Tablô</div></div>
           <div style="display:flex;flex-direction:column;gap:6px">${sub.map((v,i)=>`<div class="subr"><span>${SUBL[i]}</span><div class="bar"><i style="width:${v/5*100}%"></i></div><b class="num">${v.toFixed(1)}</b></div>`).join("")}
