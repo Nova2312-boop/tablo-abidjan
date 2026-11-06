@@ -19,7 +19,7 @@ Prérequis : **Node.js 18+** et **PostgreSQL** (testé avec PostgreSQL 18).
    ```
 4. Ouvre :
    - Site client : http://localhost:3000
-   - Espace restaurateur (admin) : http://localhost:3000/admin
+   - Équipe Tablô : http://localhost:3000/admin · Gérants : http://localhost:3000/#gerant
 
 Les tables sont créées automatiquement au premier démarrage (`server/schema.sql`), avec un admin et un client de démo.
 Ne plus ouvrir `index.html` directement ni avec Live Server : le site a besoin du serveur pour l'API.
@@ -81,7 +81,8 @@ tablo-abidjan/
 | `#explorer` | Résultats filtrés, vue liste ou carte d'Abidjan |
 | `#r-<id>` | Fiche restaurant (ex. `#r-kaya`) : menu, photos, avis, accès, réservation |
 | `#compte` | Réservé aux clients connectés : réservations, historique, favoris, alertes, fidélité |
-| `/admin` | Site à part pour les gérants et l'équipe Tablô : service et salle, cuisine et anti-gaspillage, statistiques |
+| `#gerant` | Espace des gérants, sur le site client |
+| `/admin` | Accès à part pour l'équipe Tablô : service et salle, cuisine et anti-gaspillage, statistiques |
 
 ## Backend
 

@@ -331,16 +331,20 @@ on("POST","/api/reviews",async(req,res,b)=>{const uid=await needUser(req,res);if
   json(res,201,await mePayload(uid))});
 
 /* Admin */
-on("POST","/api/admin/login",async(req,res,b)=>{const mail=str(b.mail,120).toLowerCase(),pass=typeof b.pass==="string"?b.pass:"";
-  const key="admin:"+mail+":"+ipDe(req);
+/* Identifiant de connexion : e-mail ou numéro de téléphone. Plusieurs comptes peuvent partager un numéro. */
+const identAdmin=v=>{const s=str(v,120).toLowerCase();return s.includes("@")?s:normTel(s)};
+const comptesAdmin=id=>id.includes("@")?all("SELECT * FROM admins WHERE mail=$1",[id]):/^\d{10}$/.test(id)?all("SELECT * FROM admins WHERE tel=$1",[id]):Promise.resolve([]);
+on("POST","/api/admin/login",async(req,res,b)=>{const ident=identAdmin(b.mail),pass=typeof b.pass==="string"?b.pass:"";
+  const key="admin:"+ident+":"+ipDe(req);
   if(await tooMany(key))return fail(res,429,"Trop de tentatives. Réessaie dans 15 minutes.");
-  const a=await one("SELECT * FROM admins WHERE mail=$1",[mail]);
-  if(!a||!safeEq(a.hash,hashPass(pass,a.salt))){await failed(key);return fail(res,401,"E-mail ou mot de passe incorrect.")}
+  const a=(await comptesAdmin(ident)).find(x=>safeEq(x.hash,hashPass(pass,x.salt)));
+  if(!a){await failed(key);return fail(res,401,"Identifiant ou mot de passe incorrect.")}
+  if(b.espace==="admin"&&a.role!=="super")return fail(res,403,"Cet accès est réservé à l'équipe Tablô. Connecte-toi depuis le site, rubrique « Pour les restaurants ».");
+  if(b.espace==="gerant"&&a.role==="super")return fail(res,403,"Ce compte appartient à l'équipe Tablô : utilise l'accès équipe.");
   await cleared(key);json(res,200,{admin:{mail:a.mail,nom:a.nom,role:a.role},restos:await restosFor(a)},{"Set-Cookie":await newSession("admin",a.id,1)})});
-on("POST","/api/admin/forgot",async(req,res,b)=>{const mail=str(b.mail,120).toLowerCase(),key="forgot:"+ipDe(req);
+on("POST","/api/admin/forgot",async(req,res,b)=>{const ident=identAdmin(b.mail),key="forgot:"+ipDe(req);
   if(await tooMany(key))return fail(res,429,"Trop de demandes. Réessaie plus tard.");await failed(key);
-  const a=await one("SELECT id,nom FROM admins WHERE mail=$1",[mail]);
-  if(a){const t=token();await q("INSERT INTO activations(token,admin_id,expires) VALUES($1,$2,now()+interval '1 hour')",[sha(t),a.id]);const url=baseUrl(req)+"/admin#activer-"+t;bg(msg.proReset(mail,a.nom,url));if(DEMO_OTP)console.log(`[démo] lien de réinitialisation ${mail} : ${url}`)}
+  for(const a of await comptesAdmin(ident)){const t=token();await q("INSERT INTO activations(token,admin_id,expires) VALUES($1,$2,now()+interval '1 hour')",[sha(t),a.id]);const url=baseUrl(req)+(a.role==="super"?"/admin":"/")+"#activer-"+t;bg(msg.proReset(a.mail,a.nom,url));if(DEMO_OTP)console.log(`[démo] lien de réinitialisation ${a.mail} : ${url}`)}
   json(res,200,{ok:true})}); // même réponse que le compte existe ou non
 on("POST","/api/admin/logout",async(req,res)=>{const t=cookies(req)[COOKIE.admin];if(t)await q("DELETE FROM sessions WHERE token=$1",[sha(t)]);json(res,200,{ok:true},{"Set-Cookie":clearCookie("admin")})});
 on("GET","/api/admin/me",async(req,res)=>{const s=await session(req,"admin");const a=s&&await one("SELECT id,mail,nom,role FROM admins WHERE id=$1",[s.sub]);
@@ -458,13 +462,13 @@ on("POST","/api/admin/leads/:id/compte",async(req,res,b,qs,p)=>{if(!await superO
     await run("INSERT INTO restaurants(id,data,status,owner_id,plan,contact) VALUES($1,$2,'en_attente',$3,$4,$5)",[id,JSON.stringify(d),aid,plan,JSON.stringify({gerant:l.gerant,mail:l.mail,tel:l.tel})]);
     await run("INSERT INTO activations(token,admin_id,expires) VALUES($1,$2,now()+interval '7 days')",[sha(t),aid]);
     await run("UPDATE leads SET status='compte_cree',plan=$2,rid=$3 WHERE id=$1",[l.id,plan,id])});
-  RNAMES[id]=l.resto;const url=baseUrl(req)+"/admin#activer-"+t;bg(msg.proActivation(l.mail,l.gerant,l.resto,url));json(res,201,{id,url,mail:l.mail})});
+  RNAMES[id]=l.resto;const url=baseUrl(req)+"/#activer-"+t;bg(msg.proActivation(l.mail,l.gerant,l.resto,url));json(res,201,{id,url,mail:l.mail})});
 /* 3 bis) L'équipe renvoie le lien d'activation : l'ancien lien cesse de fonctionner, aucun compte ni établissement n'est recréé */
 on("POST","/api/admin/leads/:id/lien",async(req,res,b,qs,p)=>{if(!await superOnly(req,res))return;
   const l=await one("SELECT * FROM leads WHERE id=$1",[+p.id||0]);if(!l)return fail(res,404,"Demande introuvable.");if(l.status!=="compte_cree")return fail(res,409,"Le compte de cette demande n'est pas encore créé.");
   const a=await one("SELECT id,role FROM admins WHERE mail=$1",[l.mail]);if(!a||a.role!=="gerant")return fail(res,409,"Le compte du gérant est introuvable.");
   const t=token();await tx(async run=>{await run("DELETE FROM activations WHERE admin_id=$1",[a.id]);await run("INSERT INTO activations(token,admin_id,expires) VALUES($1,$2,now()+interval '7 days')",[sha(t),a.id])});
-  const url=baseUrl(req)+"/admin#activer-"+t;bg(msg.proActivation(l.mail,l.gerant,l.resto,url));json(res,201,{url,mail:l.mail})});
+  const url=baseUrl(req)+"/#activer-"+t;bg(msg.proActivation(l.mail,l.gerant,l.resto,url));json(res,201,{url,mail:l.mail})});
 /* 4) Le gérant active son compte en choisissant son mot de passe */
 on("GET","/api/pro/activation",async(req,res,b,qs)=>{const a=await one("SELECT a.nom,a.mail FROM activations v JOIN admins a ON a.id=v.admin_id WHERE v.token=$1 AND v.expires>now()",[sha(str(qs.get("token"),100))]);
   if(!a)return fail(res,404,"Ce lien n'est plus valable. Demande-en un nouveau à l'équipe Tablô.");json(res,200,a)});
@@ -530,7 +534,7 @@ on("PATCH","/api/admin/restaurants/:id/status",async(req,res,b,qs,p)=>{if(!await
   if(st==="valide"&&!cur.demo){const m=await manque(id,cur);if(m.length)return fail(res,400,"Publication impossible, il manque : "+m.join(", ")+".")}
   const r=await one("UPDATE restaurants SET status=$2,submitted=$3,updated=now() WHERE id=$1 RETURNING data,owner_id",[id,st,st==="refuse"?false:cur.submitted]);
   const o=r.owner_id&&await one("SELECT mail,nom FROM admins WHERE id=$1",[r.owner_id]);
-  if(o){const url=baseUrl(req)+"/admin";
+  if(o){const url=baseUrl(req)+"/#gerant";
     if(st==="valide")bg(msg.proValidated(o.mail,o.nom,r.data.n,url));
     if(st==="refuse")bg(msg.proRefused(o.mail,o.nom,r.data.n,str(b.motif,300)));
     if(st==="suspendu")bg(msg.proSuspended(o.mail,o.nom,r.data.n))}
@@ -541,7 +545,7 @@ const TYPES={".html":"text/html; charset=utf-8",".css":"text/css; charset=utf-8"
 const PUBLIC=new Set(["index.html","css","js","img"]);
 function serveStatic(req,res,pathname){
   if(pathname==="/admin/"){res.writeHead(301,{Location:"/admin"});return res.end()}
-  const espace=pathname==="/admin"; // l'espace admin et gérant a sa propre adresse, hors des moteurs de recherche
+  const espace=pathname==="/admin"; // l'accès équipe a sa propre adresse, hors des moteurs de recherche
   let rel=decodeURIComponent(pathname);if(rel==="/"||espace)rel="/index.html";
   const file=path.normalize(path.join(ROOT,rel));const top=path.relative(ROOT,file).split(path.sep)[0];
   if(!file.startsWith(ROOT+path.sep)||!PUBLIC.has(top))return fail(res,404,"Introuvable");
@@ -561,7 +565,7 @@ const server=http.createServer(async(req,res)=>{
   try{const body=req.method==="GET"?{}:await readBody(req);await r.handler(req,res,body,url.searchParams,url.pathname.match(r.re).groups||{})}
   catch(e){console.error(e);if(!res.headersSent)fail(res,500,"Erreur serveur")}
 });
-init().then(()=>{envoyerRappels().catch(e=>console.error("[rappels]",e.message));return server}).then(()=>server.listen(PORT,()=>console.log(`Tablô (PostgreSQL) sur http://localhost:${PORT}   ·   admin : http://localhost:${PORT}/admin`)))
+init().then(()=>{envoyerRappels().catch(e=>console.error("[rappels]",e.message));return server}).then(()=>server.listen(PORT,()=>console.log(`Tablô (PostgreSQL) sur http://localhost:${PORT}   ·   équipe : http://localhost:${PORT}/admin · gérants : http://localhost:${PORT}/#gerant`)))
   .catch(e=>{console.error("Impossible d'initialiser la base PostgreSQL :",e.message);process.exit(1)});
 /* Rappel unique envoyé 2 h avant le repas (heure locale du serveur = heure d'Abidjan en production) */
 const hhmm=d=>iso(d)+" "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");

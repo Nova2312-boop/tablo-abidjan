@@ -1,14 +1,14 @@
 /* Tablô Abidjan — logique de l'application (routage, vues, réservation, compte, espace resto). */
 (function(){
 "use strict";
-/* Deux sites à part : le site client (/) et l'espace admin et gérant (/admin). Chaque lien renvoie vers le bon. */
+/* /admin est réservé à l'équipe Tablô. Clients et gérants utilisent le site (/), le gérant dans #gerant. */
 const SITE_ADMIN=location.pathname.replace(/\/+$/,"")==="/admin";
 function changeSite(){const h=location.hash.slice(1);
   if(SITE_ADMIN){if(h&&h!=="pro"&&!h.startsWith("activer-")){location.replace("/"+location.hash);return true}}
-  else if(h==="pro"||h.startsWith("activer-")){location.replace("/admin"+(h==="pro"?"":location.hash));return true}
+  else if(h==="pro")history.replaceState(null,"","#gerant"); // même page : le site continue de se charger
   return false}
 if(changeSite())return;
-if(SITE_ADMIN)document.title="Tablô · Espace gérant";
+if(SITE_ADMIN)document.title="Tablô · Équipe";
 /* ---------- HELPERS ---------- */
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -680,23 +680,23 @@ function openLogin(join=false,retour=false,existant=false){
 /* Identifiants vérifiés par le serveur (mot de passe haché scrypt, session en cookie HttpOnly). */
 function renderAdminLogin(){
   $("#main").innerHTML=`<div class="adm-login"><div class="adm-card">
-    <a class="logo" href="#accueil" aria-label="Tablô, retour au site client"><span class="logo-mark"></span><span><b>Tablô</b><small>Espace restaurateur</small></span></a>
-    <div><h1>Connexion à ton espace</h1><p class="muted">Gère tes réservations, ta salle et tes invendus.</p></div>
+    <a class="logo" href="#accueil" aria-label="Tablô, retour au site client"><span class="logo-mark"></span><span><b>Tablô</b><small>${SITE_ADMIN?"Équipe Tablô":"Espace gérant"}</small></span></a>
+    <div><h1>${SITE_ADMIN?"Accès équipe Tablô":"Connexion gérant"}</h1><p class="muted">${SITE_ADMIN?"Réservé à l'équipe Tablô.":"Gère tes réservations, ta salle et tes invendus."}</p></div>
     <form id="admForm" class="adm-form" novalidate>
-      <label>Adresse e-mail<input id="admMail" type="email" autocomplete="username" placeholder="ton@email.ci" required></label>
+      <label>E-mail ou téléphone<input id="admMail" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="ton@email.ci ou 07 12 34 56 78" required></label>
       <label>Mot de passe<span class="pw"><input id="admPass" type="password" autocomplete="current-password" placeholder="••••••••" required><button type="button" id="admEye" aria-label="Afficher le mot de passe">Afficher</button></span></label>
       <p class="err" id="admErr" role="alert" hidden></p>
       <button class="btn">Se connecter</button>
       <button type="button" class="linkbtn" id="admForgot" style="align-self:center">Mot de passe oublié ?</button>
     </form>
-    ${demoMode?`<div class="adm-demo"><b>Accès démo (jury)</b><span>E-mail : <code>${esc(demoMode.mail)}</code></span><span>Mot de passe : <code>${esc(demoMode.pass)}</code></span><button type="button" class="btn ghost sm" id="admFill">Remplir automatiquement</button></div>`:""}
-    <div class="adm-join"><span>Tu gères un restaurant, un maquis ou un lounge ?</span><a class="btn ghost" href="#inscription-resto">Rejoindre Tablô</a></div>
+    ${demoMode&&SITE_ADMIN?`<div class="adm-demo"><b>Accès démo (jury)</b><span>E-mail : <code>${esc(demoMode.mail)}</code></span><span>Mot de passe : <code>${esc(demoMode.pass)}</code></span><button type="button" class="btn ghost sm" id="admFill">Remplir automatiquement</button></div>`:""}
+    ${SITE_ADMIN?"":`<div class="adm-join"><span>Tu gères un restaurant, un maquis ou un lounge ?</span><a class="btn ghost" href="#inscription-resto">Rejoindre Tablô</a></div>`}
     <a class="adm-back" href="#accueil">← Retour au site client</a></div></div>`;
   $("#admEye").onclick=()=>{const p=$("#admPass"),s=p.type==="password";p.type=s?"text":"password";$("#admEye").textContent=s?"Masquer":"Afficher";$("#admEye").setAttribute("aria-label",s?"Masquer le mot de passe":"Afficher le mot de passe")};
   if($("#admFill"))$("#admFill").onclick=()=>{$("#admMail").value=demoMode.mail;$("#admPass").value=demoMode.pass;$("#admErr").hidden=true};
-  $("#admForgot").onclick=async()=>{const m=$("#admMail").value.trim(),x=$("#admErr");if(!m){x.textContent="Saisis d'abord ton adresse e-mail.";x.hidden=false;$("#admMail").focus();return}try{await api("POST","/api/admin/forgot",{mail:m});x.hidden=true;toast("Si ce compte existe, un lien vient de partir par e-mail.")}catch(e){x.textContent=e.message;x.hidden=false}};
+  $("#admForgot").onclick=async()=>{const m=$("#admMail").value.trim(),x=$("#admErr");if(!m){x.textContent="Saisis d'abord ton e-mail ou ton téléphone.";x.hidden=false;$("#admMail").focus();return}try{await api("POST","/api/admin/forgot",{mail:m});x.hidden=true;toast("Si ce compte existe, un lien vient de partir par e-mail.")}catch(e){x.textContent=e.message;x.hidden=false}};
   $("#admForm").onsubmit=async e=>{e.preventDefault();const err=$("#admErr"),b=$("#admForm .btn:not(.ghost)");err.hidden=true;b.disabled=true;b.textContent="Connexion…";
-    try{const d=await api("POST","/api/admin/login",{mail:$("#admMail").value,pass:$("#admPass").value});admin=d.admin;adminRestos=d.restos||[];pro={};proResas={};ficheCache={};proTab="service";toast("Connecté à l'espace restaurateur");renderPro()}
+    try{const d=await api("POST","/api/admin/login",{mail:$("#admMail").value,pass:$("#admPass").value,espace:SITE_ADMIN?"admin":"gerant"});admin=d.admin;adminRestos=d.restos||[];pro={};proResas={};ficheCache={};proTab="service";toast("Connecté à l'espace restaurateur");renderPro()}
     catch(x){b.disabled=false;b.textContent="Se connecter";err.textContent=x.message;err.hidden=false;$("#admPass").value="";$("#admPass").focus()}};
   setTimeout(()=>$("#admMail").focus(),30);
 }
@@ -892,7 +892,7 @@ function renderProRegister(){
       <label class="full">Message (facultatif)<textarea id="l_msg" rows="2" maxlength="800" placeholder="Le meilleur moment pour t'appeler, tes questions…"></textarea></label></div>
     <p class="err" id="rErr" role="alert" hidden></p>
     <button class="btn" id="rSend">Envoyer ma demande</button>
-    <p class="small muted" style="text-align:center">Déjà partenaire ? <a href="/admin">Se connecter à mon espace</a></p>
+    <div class="adm-join"><span>Tu as déjà un compte gérant ? Connecte-toi avec ton e-mail ou ton téléphone, et ton mot de passe.</span><a class="btn ghost" href="#gerant">Se connecter</a></div>
     <a class="adm-back" href="#accueil">← Retour au site client</a></div></div>`;
   $("#plans").onclick=e=>{const b=e.target.closest("[data-plan]");if(!b)return;plan=b.dataset.plan;document.querySelectorAll("#plans .plan").forEach(x=>x.setAttribute("aria-pressed",x===b))};
   $("#rSend").onclick=async()=>{const err=$("#rErr"),b=$("#rSend");err.hidden=true;b.disabled=true;b.textContent="Envoi…";
@@ -1038,11 +1038,12 @@ function renderPro(){
 }
 
 /* ---------- ROUTER & GLOBAL EVENTS ---------- */
-function view(){const h=(location.hash||(SITE_ADMIN?"#pro":"#accueil")).slice(1);if(h.startsWith("r-"))return"resto";if(h.startsWith("activer-"))return"activer";return["accueil","explorer","compte","pro","inscription-resto"].includes(h)?h:"accueil"}
+function view(){const h=(location.hash||(SITE_ADMIN?"#pro":"#accueil")).slice(1);if(h.startsWith("r-"))return"resto";if(h.startsWith("activer-"))return"activer";if(h==="gerant")return"pro";return["accueil","explorer","compte","pro","inscription-resto"].includes(h)?h:"accueil"}
 function rerender(keepScroll=true){const y=scrollY;route(false);if(keepScroll)window.scrollTo(0,y)}
 function route(top=true){
   if(changeSite())return;
-  const v=view();document.body.classList.toggle("is-pro",["pro","inscription-resto","activer"].includes(v));document.querySelectorAll("nav.tabs a").forEach(a=>{if(a.dataset.view===v||(v==="resto"&&a.dataset.view==="explorer"))a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
+  const v=view();
+  if(v==="pro"&&admin){if(SITE_ADMIN&&admin.role!=="super"){location.replace("/#gerant");return}if(!SITE_ADMIN&&admin.role==="super"){location.replace("/admin");return}}document.body.classList.toggle("is-pro",["pro","inscription-resto","activer"].includes(v));document.querySelectorAll("nav.tabs a").forEach(a=>{if(a.dataset.view===v||(v==="resto"&&a.dataset.view==="explorer"))a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
   if(v==="accueil")renderHome();if(v==="explorer")renderExplorer();if(v==="compte")user?renderAccount():renderAccountGate();if(v==="pro")admin?renderPro():renderAdminLogin();if(v==="inscription-resto")renderProRegister();if(v==="activer")renderActivation(location.hash.slice(9));
   if(v==="resto")renderResto(location.hash.slice(3));
   if(top)window.scrollTo(0,0);
