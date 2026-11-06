@@ -19,6 +19,8 @@ services:
         value: "0"
       - key: TZ
         value: Africa/Abidjan
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD

@@ -341,7 +341,7 @@ on("POST","/api/admin/login",async(req,res,b)=>{const ident=identAdmin(b.mail),p
   if(!a){await failed(key);return fail(res,401,"Identifiant ou mot de passe incorrect.")}
   if(b.espace==="admin"&&a.role!=="super")return fail(res,403,"Cet accès est réservé à l'équipe Tablô. Connecte-toi depuis le site, rubrique « Pour les restaurants ».");
   if(b.espace==="gerant"&&a.role==="super")return fail(res,403,"Ce compte appartient à l'équipe Tablô : utilise l'accès équipe.");
-  await cleared(key);json(res,200,{admin:{mail:a.mail,nom:a.nom,role:a.role},restos:await restosFor(a)},{"Set-Cookie":await newSession("admin",a.id,1)})});
+  await cleared(key);json(res,200,{admin:{mail:a.mail,nom:a.nom,role:a.role},restos:await restosFor(a)},{"Set-Cookie":await newSession("admin",a.id,a.role==="super"?7:30)})});
 on("POST","/api/admin/forgot",async(req,res,b)=>{const ident=identAdmin(b.mail),key="forgot:"+ipDe(req);
   if(await tooMany(key))return fail(res,429,"Trop de demandes. Réessaie plus tard.");await failed(key);
   for(const a of await comptesAdmin(ident)){const t=token();await q("INSERT INTO activations(token,admin_id,expires) VALUES($1,$2,now()+interval '1 hour')",[sha(t),a.id]);const url=baseUrl(req)+(a.role==="super"?"/admin":"/")+"#activer-"+t;bg(msg.proReset(a.mail,a.nom,url));if(DEMO_OTP)console.log(`[démo] lien de réinitialisation ${a.mail} : ${url}`)}
@@ -398,7 +398,9 @@ function cleanFiche(b,telReq=true){const e=[];const n=str(b.n,80),c=str(b.c,40),
   if(!/^\d{1,2}h(\d{2})? – \d{1,2}h(\d{2})?$/.test(h))e.push("les horaires (ex. 12h – 23h30)");if(!(tables>=1&&tables<=200))e.push("le nombre de tables (1 à 200)");const FIXE=/^[02]\d{9}$/; // mobile (01, 05, 07…) ou fixe (21, 25, 27…)
   if(telReq?!FIXE.test(tel):(tel&&!FIXE.test(tel)))e.push("le téléphone de l'établissement (10 chiffres)");
   const tags=(Array.isArray(b.tags)?b.tags:[]).filter(x=>CAT.TAGS.includes(x)).slice(0,10);
-  return {err:e.length?"Vérifie "+e.join(", ")+".":null,data:{n,c,q:q2,t,cu,b:bud,h,d,tables,tags,tel,nouv:true}}}
+  /* Position facultative : uniquement dans le Grand Abidjan. Absente = l'ancienne est conservée. */
+  let pos={};if(b.lat!==undefined&&b.lat!==""&&b.lat!==null){const lat=+b.lat,lng=+b.lng;if(lat>=4.9&&lat<=5.8&&lng>=-4.6&&lng<=-3.4)pos={lat:+lat.toFixed(6),lng:+lng.toFixed(6)};else e.push("la position sur la carte (dans le Grand Abidjan)")}
+  return {err:e.length?"Vérifie "+e.join(", ")+".":null,data:{n,c,q:q2,t,cu,b:bud,h,d,tables,tags,tel,nouv:true,...pos}}}
 function cleanMenu(m){const out={};if(!m||typeof m!=="object")return out;let count=0;
   for(const [cat,items] of Object.entries(m).slice(0,12)){const k=str(cat,40);if(!k||!Array.isArray(items))continue;
     const list=items.slice(0,40).map(x=>[str(x[0],80),Math.max(0,Math.min(1e7,Math.round(+x[1]||0))),str(x[2]||"",120)]).filter(x=>x[0]).map(x=>x[2]?x:x.slice(0,2));
@@ -430,7 +432,7 @@ on("GET","/api/restaurants",async(req,res)=>{
     (SELECT COUNT(*) FROM reviews v WHERE v.rid=r.id) AS avis,
     (SELECT COALESCE(array_agg(p.id ORDER BY p.pos,p.id),'{}') FROM restaurant_photos p WHERE p.rid=r.id) AS photos FROM restaurants r WHERE status='valide' ORDER BY r.demo DESC, r.created`);
   const revs={};(await all("SELECT id,rid,nom,date,sc,txt,reply FROM reviews ORDER BY created DESC LIMIT 2000")).forEach(v=>{(revs[v.rid]=revs[v.rid]||[]).push({id:v.id,nom:prive(v.nom),date:v.date,sc:v.sc,txt:v.txt,reply:v.reply,visits:1})});
-  json(res,200,{restaurants:rows.map(r=>({...restoPublic(r),revs:(revs[r.id]||[]).slice(0,30)})),menus:Object.fromEntries(rows.map(r=>[r.id,r.menu]))})});
+  json(res,200,{restaurants:rows.map(r=>({...restoPublic(r),revs:(revs[r.id]||[]).slice(0,30)})),menus:Object.fromEntries(rows.map(r=>[r.id,r.menu])),mapsKey:process.env.GOOGLE_MAPS_API_KEY||""})});
 
 /* 1) Le restaurant envoie une demande : l'équipe le rappelle */
 on("POST","/api/pro/demande",async(req,res,b)=>{
@@ -475,7 +477,7 @@ on("GET","/api/pro/activation",async(req,res,b,qs)=>{const a=await one("SELECT a
 on("POST","/api/pro/activation",async(req,res,b)=>{const pass=typeof b.pass==="string"?b.pass:"";if(pass.length<8||!/[A-Za-z]/.test(pass)||!/\d/.test(pass))return fail(res,400,"Mot de passe : 8 caractères minimum, avec au moins une lettre et un chiffre.");
   const v=await one("SELECT * FROM activations WHERE token=$1 AND expires>now()",[sha(str(b.token,100))]);if(!v)return fail(res,404,"Ce lien n'est plus valable. Demande-en un nouveau à l'équipe Tablô.");
   const salt=crypto.randomBytes(16).toString("hex");await tx(async run=>{await run("UPDATE admins SET salt=$2,hash=$3 WHERE id=$1",[v.admin_id,salt,hashPass(pass,salt)]);await run("DELETE FROM activations WHERE admin_id=$1",[v.admin_id]);await run("DELETE FROM sessions WHERE kind='admin' AND sub=$1",[v.admin_id])});
-  const a=await one("SELECT id,mail,nom,role FROM admins WHERE id=$1",[v.admin_id]);json(res,200,{admin:{mail:a.mail,nom:a.nom,role:a.role},restos:await restosFor(a)},{"Set-Cookie":await newSession("admin",a.id,1)})});
+  const a=await one("SELECT id,mail,nom,role FROM admins WHERE id=$1",[v.admin_id]);json(res,200,{admin:{mail:a.mail,nom:a.nom,role:a.role},restos:await restosFor(a)},{"Set-Cookie":await newSession("admin",a.id,a.role==="super"?7:30)})});
 
 /* Un gérant déjà inscrit ajoute un autre établissement */
 on("POST","/api/admin/restaurants",async(req,res,b)=>{const a=await adminCtx(req,res);if(!a)return;

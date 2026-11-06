@@ -226,6 +226,11 @@ select.plain{border:1px solid var(--line);border-radius:8px;background:var(--sur
 .reply{margin-left:20px;padding:8px 12px;border-left:3px solid var(--lagune);background:var(--lagune-soft);border-radius:0 8px 8px 0;font-size:14px}
 .minimap{border-radius:12px;overflow:hidden;border:1px solid var(--line)}
 .minimap svg{width:100%;height:auto;display:block}
+.gmap-on{width:100%;height:460px;border-radius:10px}
+.minimap .gmap-on{height:300px;border-radius:0}
+.gmap-info{font-size:14px;line-height:1.4;color:#2D333F}.gmap-info a{display:inline-block;margin-top:4px;font-weight:600;color:#DA3743}
+.pos-ed{display:flex;flex-direction:column;gap:8px}.pos-ed[hidden]{display:none}.pos-ed .gmap-on{height:320px}
+.pos-row{display:flex;flex-wrap:wrap;gap:8px}.pos-row input{flex:1 1 220px;min-width:0}
 .widget{position:sticky;top:calc(env(safe-area-inset-top,0px) + 76px);align-self:start;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px;box-shadow:0 6px 24px rgba(0,0,0,.06)}
 .widget h3{font-size:20px}
 .widget .wf{display:grid;grid-template-columns:1fr 1fr;gap:8px}

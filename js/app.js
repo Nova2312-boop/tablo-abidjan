@@ -8,6 +8,7 @@ function changeSite(){const h=location.hash.slice(1);
   else if(h==="pro")history.replaceState(null,"","#gerant"); // même page : le site continue de se charger
   return false}
 if(changeSite())return;
+let MAPS_KEY="";
 if(SITE_ADMIN)document.title="Tablô · Équipe";
 /* ---------- HELPERS ---------- */
 const $=s=>document.querySelector(s);
@@ -33,7 +34,7 @@ let user=null,admin=null,notifs=[],favs=new Set(),alerts=[],pts=0,redeemed=[],my
 let offres=[],retraits=[],commandes=[],demoMode=null;let pro={},proResas={},proStats={},adminRestos=[],ficheCache={};
 /* ---------- API (backend Node : server/server.js) ---------- */
 /* Catalogue des établissements validés (PostgreSQL) : remplace les données d'exemple de js/data.js */
-async function loadCatalog(){try{const d=await api("GET","/api/restaurants");R.splice(0,R.length,...d.restaurants);
+async function loadCatalog(){try{const d=await api("GET","/api/restaurants");MAPS_KEY=d.mapsKey||"";R.splice(0,R.length,...d.restaurants);
   Object.keys(MENUS).forEach(k=>delete MENUS[k]);Object.assign(MENUS,d.menus);
   try{offres=(await api("GET","/api/offres")).offres||[]}catch(e){offres=[]}
   for(let i=EXPS.length-1;i>=0;i--)if(!byId(EXPS[i].rid))EXPS.splice(i,1)}catch(e){toast(e.message)}}
@@ -278,9 +279,43 @@ function renderExplorerResults(){
   const box=$("#results");
   if(!list.length){box.innerHTML=`<div class="empty">Aucune table ne correspond. Retire un filtre ou passe à « Tout Abidjan ».<br><br><button class="btn ghost sm" id="emptyAll">Voir tout Abidjan</button></div>`;$("#emptyAll").onclick=()=>{st.commune=null;st.quartier=null;["types","budgets","cuis","tags"].forEach(k=>st[k].clear());st.openNow=false;st.q="";save();renderLoc();renderExplorer()};return}
   if(st.view==="liste"){box.innerHTML=`<div class="grid">${list.map(r=>card(r)).join("")}</div>`;return}
-  box.innerHTML=`<div class="mapbox">${mapSvg(list)}</div><p class="small muted" style="margin-top:6px">Plan schématique des communes. Touche une commune pour filtrer.</p><div class="map-list">${list.map(r=>`<div class="map-item" data-rid="${r.id}" tabindex="0"><i style="${coverBg(r)}"></i><div style="min-width:0"><b>${esc(r.n)}</b><div class="meta"><span class="stars">★ ${noteTxt(r)}</span><span>${r.q}, ${r.c}</span></div></div></div>`).join("")}</div>`;
-  box.querySelectorAll("[data-mapc]").forEach(g=>{g.onclick=()=>{st.commune=g.dataset.mapc;st.quartier=null;save();renderLoc();renderExplorerResults()};g.onkeydown=e=>{if(e.key==="Enter")g.onclick()}});
+  box.innerHTML=`<div class="mapbox"><div class="gmap" id="gmapList">${mapSvg(list)}</div></div><p class="small muted" id="mapNote" style="margin-top:6px">Plan schématique des communes. Touche une commune pour filtrer.</p><div class="map-list">${list.map(r=>`<div class="map-item" data-rid="${r.id}" tabindex="0"><i style="${coverBg(r)}"></i><div style="min-width:0"><b>${esc(r.n)}</b><div class="meta"><span class="stars">★ ${noteTxt(r)}</span><span>${r.q}, ${r.c}</span></div></div></div>`).join("")}</div>`;
+  const lierPlan=()=>box.querySelectorAll("[data-mapc]").forEach(g=>{g.onclick=()=>{st.commune=g.dataset.mapc;st.quartier=null;save();renderLoc();renderExplorerResults()};g.onkeydown=e=>{if(e.key==="Enter")g.onclick()}});
+  lierPlan();monterCarte($("#gmapList"),list,ok=>{const n=$("#mapNote");if(ok){if(n)n.textContent="Touche un repère pour voir le restaurant. Sans adresse exacte, sa position est approximative."}else{if(n)n.textContent="Plan schématique des communes. Touche une commune pour filtrer.";lierPlan()}});
 }
+/* ---------- GOOGLE MAPS ----------
+   Le plan schématique reste affiché tant que la carte n'est pas prête, et revient si Google refuse la clé. */
+let mapsPromise=null,mapsKO=false;const mapsReplis=[];
+function chargerMaps(){
+  if(window.google&&google.maps&&google.maps.Map&&google.maps.Marker)return Promise.resolve();
+  if(!MAPS_KEY||mapsKO)return Promise.reject(new Error("Carte indisponible"));
+  if(mapsPromise)return mapsPromise;
+  window.gm_authFailure=()=>{mapsKO=true;mapsReplis.splice(0).forEach(f=>f())};
+  mapsPromise=new Promise((ok,ko)=>{window.__tabloMaps=()=>Promise.all(["maps","marker","geocoding"].map(l=>google.maps.importLibrary(l))).then(()=>ok(),ko);
+    const s=document.createElement("script");s.src="https://maps.googleapis.com/maps/api/js?key="+encodeURIComponent(MAPS_KEY)+"&loading=async&callback=__tabloMaps&language=fr&region=CI";s.async=true;s.onerror=()=>{mapsKO=true;ko(new Error("Carte indisponible"))};document.head.append(s)});
+  return mapsPromise}
+/* Position enregistrée par le gérant, sinon point approximatif dans la commune (toujours le même pour un restaurant) */
+function posOf(r){if(r.lat!=null&&r.lng!=null)return{lat:+r.lat,lng:+r.lng,exact:true};const g=GPS[r.c]||[5.34,-4.02];let h=0;for(const ch of String(r.id))h=(h*31+ch.charCodeAt(0))>>>0;
+  return{lat:g[0]+((h%100)/100-.5)*.014,lng:g[1]+(((h>>8)%100)/100-.5)*.014,exact:false}}
+const mapOpts=o=>({mapTypeControl:false,streetViewControl:false,fullscreenControl:false,...o});
+function monterCarte(el,list,apres){if(!el||!list.length)return;
+  chargerMaps().then(()=>{if(!el.isConnected||mapsKO)return;const svg=el.innerHTML;el.innerHTML="";el.classList.add("gmap-on");
+    mapsReplis.push(()=>{if(!el.isConnected)return;el.classList.remove("gmap-on");el.innerHTML=svg;if(apres)apres(false)});
+    const pts=list.map(r=>({r,p:posOf(r)})),map=new google.maps.Map(el,mapOpts({center:pts[0].p,zoom:pts[0].p.exact?16:14})),info=new google.maps.InfoWindow();
+    const bornes=new google.maps.LatLngBounds();
+    pts.forEach(({r,p})=>{const pos={lat:p.lat,lng:p.lng},m=new google.maps.Marker({position:pos,map,title:r.n});bornes.extend(pos);
+      m.addListener("click",()=>{const d=document.createElement("div");d.className="gmap-info";const b=document.createElement("b");b.textContent=r.n;const q=document.createElement("div");q.textContent=r.q+", "+r.c+(p.exact?"":" · position approximative");const a=document.createElement("a");a.href="#r-"+r.id;a.textContent="Voir la fiche";d.append(b,q,a);info.setContent(d);info.open({map,anchor:m})})});
+    if(pts.length>1)map.fitBounds(bornes,48);if(apres)apres(true)}).catch(()=>{})}
+function bindPosition(){const box=$("#posEd");if(!box)return;
+  chargerMaps().then(()=>{if(!box.isConnected||mapsKO)return;box.hidden=false;mapsReplis.push(()=>{box.hidden=true});
+    const la=$("#f_lat"),ln=$("#f_lng"),info=$("#posInfo"),g=GPS[$("#f_c").value]||[5.34,-4.02],a=la.value!=="",c=a?{lat:+la.value,lng:+ln.value}:{lat:g[0],lng:g[1]};
+    const map=new google.maps.Map($("#posMap"),mapOpts({center:c,zoom:a?16:13})),mk=new google.maps.Marker({position:c,map,draggable:true,visible:a});
+    const dire=t=>{info.textContent=t};
+    const poser=(lat,lng,zoom)=>{if(!(lat>=4.9&&lat<=5.8&&lng>=-4.6&&lng<=-3.4))return dire("Cette position est hors du Grand Abidjan.");la.value=lat.toFixed(6);ln.value=lng.toFixed(6);const p={lat,lng};mk.setPosition(p);mk.setVisible(true);map.panTo(p);if(zoom)map.setZoom(zoom);dire("Position choisie. Pense à enregistrer ta fiche.")};
+    map.addListener("click",e=>poser(e.latLng.lat(),e.latLng.lng()));mk.addListener("dragend",()=>{const p=mk.getPosition();poser(p.lat(),p.lng())});
+    $("#posMe").onclick=()=>{if(!navigator.geolocation)return dire("Ton navigateur ne donne pas ta position.");dire("Recherche de ta position…");navigator.geolocation.getCurrentPosition(x=>poser(x.coords.latitude,x.coords.longitude,17),()=>dire("Position refusée ou introuvable. Clique plutôt sur la carte."),{enableHighAccuracy:true,timeout:10000})};
+    const chercher=()=>{const t=$("#posQ").value.trim();if(!t)return;dire("Recherche…");new google.maps.Geocoder().geocode({address:t+", "+$("#f_c").value+", Abidjan, Côte d'Ivoire"}).then(r=>{const l=r.results[0].geometry.location;poser(l.lat(),l.lng(),17)}).catch(()=>dire("Lieu introuvable. Clique plutôt sur la carte."))};
+    $("#posGo").onclick=chercher;$("#posQ").onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();chercher()}}}).catch(()=>{})}
 function mapSvg(list,focus){
   const cnt={};list.forEach(r=>cnt[r.c]=(cnt[r.c]||0)+1);
   return `<svg viewBox="0 0 860 520" role="img" aria-label="Plan schématique d'Abidjan">
@@ -329,8 +364,8 @@ function renderResto(id){
         <div>${revs.map(v=>{const [a]=HUES[hash(v.nom)%HUES.length];return `<div class="review"><div class="who"><span class="avatar" style="background:${a}">${v.nom[0]}</span><div><b>${esc(v.nom)}</b><div class="small muted">${v.visits} visite${v.visits>1?"s":""} · ${new Date(v.date+"T12:00").toLocaleDateString("fr-FR",{day:"numeric",month:"long"})}</div></div><span class="stars" style="margin-left:auto">★ ${(v.sc.reduce((x,y)=>x+y)/4).toFixed(1)}</span></div>
           <div class="small muted">${v.sc.map((x,i)=>SUBL[i]+" "+x).join(" · ")}</div><p>${esc(v.txt)}</p>${v.reply?`<div class="reply"><b>Réponse du restaurant :</b> ${esc(v.reply)}</div>`:""}</div>`}).join("")}</div></div>
       <div class="r-sec" data-sec="Accès" style="border:0"><h2>Accès</h2><p style="margin-bottom:10px">${r.q}, ${r.c}, Abidjan${r.tags.includes("Parking")?" · Parking sur place":""}</p>
-        <div class="minimap">${mapSvg([r],r.c)}</div>
-        <p class="small" style="margin-top:8px"><a href="https://www.google.com/maps/search/${encodeURIComponent(r.q+" "+r.c+" Abidjan")}" target="_blank" rel="noopener">Ouvrir l'itinéraire dans Google Maps</a> · Taxi, Yango ou gbaka : indique « ${r.q}, ${r.c} ».</p></div>
+        <div class="minimap"><div class="gmap" id="gmapFiche" data-r="${esc(r.id)}">${mapSvg([r],r.c)}</div></div>
+        <p class="small" style="margin-top:8px"><a href="${posOf(r).exact?"https://www.google.com/maps/dir/?api=1&destination="+posOf(r).lat+","+posOf(r).lng:"https://www.google.com/maps/search/"+encodeURIComponent(r.q+" "+r.c+" Abidjan")}" target="_blank" rel="noopener">Ouvrir l'itinéraire dans Google Maps</a> · Taxi, Yango ou gbaka : indique « ${r.q}, ${r.c} ».</p></div>
       ${similar.length?`<section class="block" style="padding-top:24px"><div class="sec-head"><h2>Tu aimeras aussi</h2></div><div class="rail">${similar.map(x=>card(x,{noSlots:true})).join("")}</div></section>`:""}
     </div>
     <aside class="widget" id="widget"></aside>
@@ -573,17 +608,23 @@ function renderAccountGate(){
 }
 /* ---------- EN-TÊTE CLIENT (invité / connecté) ---------- */
 const initials=n=>String(n||"?").trim().split(/\s+/).map(w=>w[0]).slice(0,2).join("").toUpperCase();
+const espaceUrl=()=>admin&&admin.role==="super"?"/admin":"#gerant";
+const espaceNom=()=>admin&&admin.role==="super"?"Accès équipe Tablô":"Mon espace gérant";
 function renderHeader(){
-  $("#guestActs").hidden=!!user;$("#userActs").hidden=!user;const nc=document.querySelector('nav.tabs a[data-view="compte"]');if(nc)nc.hidden=!user;
+  const seulPro=!user&&!!admin; // gérant ou équipe connecté, sans compte client ouvert
+  $("#guestActs").hidden=!!user||seulPro;$("#userActs").hidden=!user&&!seulPro;const nc=document.querySelector('nav.tabs a[data-view="compte"]');if(nc){nc.hidden=!user&&!seulPro;nc.setAttribute("href",seulPro?espaceUrl():"#compte")}
+  document.querySelectorAll("#userActs .hp-wrap").forEach((w,i)=>{if(i)w.style.display=seulPro?"none":""});
+  if(seulPro){$("#avIni").textContent=initials(admin.nom);$("#avDot").hidden=true}
   if(user){$("#avIni").textContent=initials(user.nom);$("#notifDot").hidden=!notifs.some(n=>!n.read);$("#avDot").hidden=!!user.com}
 }
 function closeHpops(except){document.querySelectorAll(".hpop").forEach(p=>{if(p!==except){p.hidden=true;const b=p.previousElementSibling;if(b)b.setAttribute("aria-expanded","false")}})}
 const BELL=`<svg class="sketch" viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="60" cy="20" r="5"/><path d="M34 82c4-6 6-14 6-26 0-14 9-26 20-26s20 12 20 26c0 12 2 20 6 26"/><ellipse cx="60" cy="86" rx="30" ry="8"/><path d="M53 94a7 7 0 0 0 14 0"/><path d="M74 46c2 3 3 7 3 11" opacity=".5"/></svg>`;
 function fillHpop(k){
   const p=$("#hp-"+k);const go=(h,t)=>`<a class="hp-link" href="#${h}" ${t?`data-acct="${t}"`:""}>`;
+  if(k==="av"&&!user){p.innerHTML=`<div class="hp-head"><span class="hp-av">${esc(initials(admin.nom))}</span><div><b>Bonjour ${esc(admin.nom.split(" ")[0])} !</b><small class="muted">${esc(admin.mail||"")}</small></div></div><nav class="hp-menu"><a class="hp-link" href="${espaceUrl()}">${espaceNom()}</a><button type="button" data-hpact="logoutpro" class="danger">Déconnexion</button></nav>`;return}
   if(k==="av"){p.innerHTML=`<div class="hp-head"><span class="hp-av">${esc(initials(user.nom))}</span><div><b>Bonjour ${esc(user.nom.split(" ")[0])} !</b><small class="muted">${esc(user.tel?"+225 "+user.tel.replace(/\D/g,"").replace(/^225/,"").replace(/(\d{2})(?=\d)/g,"$1 "):(user.mail||""))}</small></div></div>
     ${user.com?"":`<button class="hp-hint" type="button" data-hpact="profil"><i class="hdot"></i>Complète ton profil : choisis ta commune préférée</button>`}
-    <nav class="hp-menu">${go("compte","reservations")}Mes réservations</a>${go("compte","favoris")}Mes favoris</a>${go("compte","fidelite")}Mes points (${pts.toLocaleString("fr-FR")})</a><button type="button" data-hpact="profil">Mon profil</button><button type="button" data-hpact="logout" class="danger">Déconnexion</button></nav>`}
+    <nav class="hp-menu">${go("compte","reservations")}Mes réservations</a>${go("compte","favoris")}Mes favoris</a>${go("compte","fidelite")}Mes points (${pts.toLocaleString("fr-FR")})</a>${admin?`<a class="hp-link" href="${espaceUrl()}">${espaceNom()}</a>`:""}<button type="button" data-hpact="profil">Mon profil</button><button type="button" data-hpact="logout" class="danger">Déconnexion</button></nav>`}
   if(k==="resa"){const up=resas.filter(x=>x.status==="confirmée"&&x.date>=iso(today)).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
     p.innerHTML=`<h3>Réservations à venir</h3>${up.length?`<ul class="hp-list">${up.slice(0,4).map(x=>{const r=byId(x.rid);return `<li><a href="#r-${r.id}"><b>${esc(r.n)}</b><span class="small muted">${longDate(x.date)} · ${hm(x.time)} · ${x.pers} pers.</span><span class="small num">Code ${x.code}</span></a></li>`}).join("")}</ul>${go("compte","reservations")}Tout voir</a>`:`<p class="muted">Tu n'as aucune réservation à venir.</p><a class="btn sm" href="#explorer">Trouver une table</a>`}`}
   if(k==="notif"){
@@ -601,7 +642,8 @@ document.querySelectorAll(".hpop").forEach(p=>p.addEventListener("click",e=>{e.s
   if(e.target.closest("a")){closeHpops();return}
   const act=e.target.closest("[data-hpact]");if(!act)return;closeHpops();
   if(act.dataset.hpact==="profil")openSignin();
-  if(act.dataset.hpact==="logout")logoutUser()}));
+  if(act.dataset.hpact==="logout")logoutUser();
+  if(act.dataset.hpact==="logoutpro")api("POST","/api/admin/logout").catch(()=>{}).finally(()=>{admin=null;adminRestos=[];pro={};proResas={};ficheCache={};renderHeader();toast("Tu es déconnecté");rerender()})}));
 document.addEventListener("click",()=>closeHpops());
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeHpops()});
 $("#signBtn").onclick=()=>openProfil();
@@ -749,11 +791,13 @@ function ficheForm(d={},opts={}){
     ${opts.rccm!==false?`<label>RCCM (facultatif)<input id="f_rccm" value="${esc(d.rccm||"")}" placeholder="CI-ABJ-2026-B-12345"></label>`:""}
     <label class="full">Description<textarea id="f_d" rows="3" maxlength="400" placeholder="Ambiance, spécialités, ce qui vous rend unique…">${esc(d.d||"")}</textarea></label>
     <fieldset class="full tagset"><legend>Atouts (10 max)</legend>${TAGS.map(t=>`<label class="check"><input type="checkbox" value="${esc(t)}" ${(d.tags||[]).includes(t)?"checked":""}> ${esc(t)}</label>`).join("")}</fieldset>
+    <input type="hidden" id="f_lat" value="${d.lat!=null?+d.lat:""}"><input type="hidden" id="f_lng" value="${d.lng!=null?+d.lng:""}">
+    <div class="full pos-ed" id="posEd" hidden><b>Position sur la carte (facultatif)</b><p class="small muted">Clique sur la carte ou fais glisser le repère. Les clients verront l'endroit exact et auront l'itinéraire.</p><div class="pos-row"><input id="posQ" maxlength="120" placeholder="Nom du lieu, rue, repère" aria-label="Chercher un lieu"><button type="button" class="btn ghost sm" id="posGo">Chercher</button><button type="button" class="btn ghost sm" id="posMe">Ma position</button></div><div class="gmap gmap-on" id="posMap"></div><p class="small muted" id="posInfo" role="status"></p></div>
   </div>`}
-function bindFicheForm(){const c=$("#f_c");if(c)c.onchange=()=>{$("#f_q").innerHTML=COMMUNES[c.value].q.map(x=>`<option>${esc(x)}</option>`).join("")}}
+function bindFicheForm(){bindPosition();const c=$("#f_c");if(c)c.onchange=()=>{$("#f_q").innerHTML=COMMUNES[c.value].q.map(x=>`<option>${esc(x)}</option>`).join("")}}
 function readFiche(){const v=id=>{const e=$("#"+id);return e?e.value:""};
   return {n:v("f_n"),t:v("f_t"),cu:v("f_cu"),c:v("f_c"),q:v("f_q"),b:+v("f_b"),...($("#f_tables")?{tables:+v("f_tables"),h:v("f_ho")+" – "+v("f_hc")}:{}),
-    tel:v("f_tel").replace(/[\s.-]/g,""),rccm:v("f_rccm"),d:v("f_d"),tags:[...document.querySelectorAll(".tagset input:checked")].map(x=>x.value).slice(0,10)}}
+    lat:v("f_lat"),lng:v("f_lng"),tel:v("f_tel").replace(/[\s.-]/g,""),rccm:v("f_rccm"),d:v("f_d"),tags:[...document.querySelectorAll(".tagset input:checked")].map(x=>x.value).slice(0,10)}}
 function menuEditor(menu={}){const rows=[];Object.entries(menu).forEach(([cat,list])=>list.forEach(it=>rows.push([cat,it[0],it[1],it[2]||""])));if(!rows.length)rows.push(["Plats","","",""]);
   const row=r=>`<div class="menu-row"><input data-mc value="${esc(r[0])}" placeholder="Catégorie" aria-label="Catégorie"><input data-mn value="${esc(r[1])}" placeholder="Plat" aria-label="Plat"><input data-mp type="number" min="0" step="100" value="${r[2]===""?"":+r[2]}" placeholder="Prix F" aria-label="Prix en francs CFA"><button type="button" class="x" data-mdel aria-label="Supprimer">×</button></div>`;
   return `<div class="menu-ed" id="menuEd"><div class="menu-head small muted"><span>Catégorie</span><span>Plat</span><span>Prix (F)</span><span></span></div>${rows.map(row).join("")}</div>
@@ -1042,10 +1086,12 @@ function view(){const h=(location.hash||(SITE_ADMIN?"#pro":"#accueil")).slice(1)
 function rerender(keepScroll=true){const y=scrollY;route(false);if(keepScroll)window.scrollTo(0,y)}
 function route(top=true){
   if(changeSite())return;
+  renderHeader();
   const v=view();
+  if(v==="compte"&&!user&&admin){if(admin.role==="super")location.replace("/admin");else location.hash="gerant";return}
   if(v==="pro"&&admin){if(SITE_ADMIN&&admin.role!=="super"){location.replace("/#gerant");return}if(!SITE_ADMIN&&admin.role==="super"){location.replace("/admin");return}}document.body.classList.toggle("is-pro",["pro","inscription-resto","activer"].includes(v));document.querySelectorAll("nav.tabs a").forEach(a=>{if(a.dataset.view===v||(v==="resto"&&a.dataset.view==="explorer"))a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
   if(v==="accueil")renderHome();if(v==="explorer")renderExplorer();if(v==="compte")user?renderAccount():renderAccountGate();if(v==="pro")admin?renderPro():renderAdminLogin();if(v==="inscription-resto")renderProRegister();if(v==="activer")renderActivation(location.hash.slice(9));
-  if(v==="resto")renderResto(location.hash.slice(3));
+  if(v==="resto"){renderResto(location.hash.slice(3));const gf=$("#gmapFiche");if(gf&&byId(gf.dataset.r))monterCarte(gf,[byId(gf.dataset.r)])}
   if(top)window.scrollTo(0,0);
 }
 window.addEventListener("hashchange",()=>route(true));

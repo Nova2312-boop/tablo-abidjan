@@ -16,6 +16,8 @@ const COMMUNES={
  "Grand-Bassam":{x:760,y:450,q:["Quartier France","Moossou"],lm:["Quartier colonial UNESCO","Plage"]}
 };
 const CN=Object.keys(COMMUNES);
+/* Centres approximatifs des communes [latitude, longitude] */
+const GPS={"Cocody":[5.354,-3.976],"Plateau":[5.323,-4.02],"Marcory":[5.303,-3.983],"Treichville":[5.293,-4.003],"Yopougon":[5.34,-4.087],"Koumassi":[5.295,-3.952],"Port-Bouët":[5.255,-3.926],"Adjamé":[5.356,-4.024],"Abobo":[5.43,-4.02],"Bingerville":[5.355,-3.885],"Grand-Bassam":[5.211,-3.738]};
 const TYPES=["Maquis","Restaurant","Gastronomique","Lounge","Garba & rapide","Chaîne & fast-food"];
 const BUDGETS=[{id:1,l:"− 5 000 F"},{id:2,l:"5 – 15 000 F"},{id:3,l:"15 – 30 000 F"},{id:4,l:"30 000 F +"}];
 const BUD_AVG=[0,3500,10000,22000,42000];
