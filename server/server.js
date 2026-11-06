@@ -483,7 +483,7 @@ on("PATCH","/api/admin/restaurants/:id/status",async(req,res,b,qs,p)=>{if(!await
 
 /* ---------- Fichiers statiques ---------- */
 const TYPES={".html":"text/html; charset=utf-8",".css":"text/css; charset=utf-8",".js":"text/javascript; charset=utf-8",".png":"image/png",".jpg":"image/jpeg",".svg":"image/svg+xml",".ico":"image/x-icon",".webp":"image/webp"};
-const PUBLIC=new Set(["index.html","css","js"]);
+const PUBLIC=new Set(["index.html","css","js","img"]);
 function serveStatic(req,res,pathname){
   let rel=decodeURIComponent(pathname);if(rel==="/")rel="/index.html";
   const file=path.normalize(path.join(ROOT,rel));const top=path.relative(ROOT,file).split(path.sep)[0];
