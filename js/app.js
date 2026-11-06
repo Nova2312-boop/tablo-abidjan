@@ -47,7 +47,7 @@ const needLogin=msg=>{toast(msg||"Connecte-toi pour continuer");openLogin();retu
 const occ={};let curB=null;
 function ensureOcc(date){if(occ[date])return;occ[date]={};
   api("GET","/api/availability?date="+date).then(d=>{occ[date]=d.occ||{};if(dlg.open){if(curB&&curB.step===1)stepRender(curB)}else if(["accueil","explorer","resto","compte"].includes(view()))rerender()}).catch(()=>{})}
-function slotsFor(r,date=st.date,time=st.time,pers=st.pers,edit=null){ensureOcc(date);
+function slotsFor(r,date=st.date,time=st.time,pers=st.pers,edit=null){if(sansResa(r))return [];ensureOcc(date);
   const [H,M]=time.split(":").map(Number);const base=H*60+M,out=[];const n=new Date(),nowM=date===iso(n)?n.getHours()*60+n.getMinutes():-1;
   const ign=edit&&edit.date===date?{time:edit.time,tables:edit.tables}:null;
   for(let k=-2;k<=2;k++){const m=base+k*30;if(m<0||m>=24*60)continue;const t=String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
@@ -70,6 +70,7 @@ const isOpenAt=(r,t)=>!!SLOTS.serviceA(r,st.date,t);
 
 /* ---------- COMMON CARD ---------- */
 const canOrder=r=>!!(r.commande&&(r.commande.emporter||r.commande.livraison));
+function sansResa(r){return canOrder(r)&&!!r.commande.seul}
 function card(r,opts={}){
   const s=slotsFor(r);const booked=6+hash(r.id+st.date)%42;
   return `<article class="card" data-rid="${r.id}" tabindex="0" aria-label="${esc(r.n)}">
@@ -79,9 +80,9 @@ function card(r,opts={}){
       <h3>${esc(r.n)}</h3>
       <div class="meta"><span class="stars num">★ ${noteTxt(r)}</span><span class="num">(${(r.avis||0).toLocaleString("fr-FR")} avis)</span><span>${price(r.b)}</span></div>
       <div class="meta"><span>${r.cu}</span><span>·</span><span>${r.q}, ${r.c}</span></div>
-      ${r.demo?`<div class="trend num">Réservé ${booked} fois aujourd'hui</div>`:""}
+      ${r.demo&&!sansResa(r)?`<div class="trend num">Réservé ${booked} fois aujourd'hui</div>`:""}
       ${canOrder(r)?`<button class="btn sm card-order" data-order="${r.id}">Commander</button>`:""}
-      ${opts.noSlots?"":`<div class="slots">${s.map(x=>`<button class="slot ${x.free?"":"off"}" ${x.free?"":"disabled"} data-book="${r.id}" data-t="${x.t}">${hm(x.t)}</button>`).join("")}</div>`}
+      ${opts.noSlots||sansResa(r)?"":`<div class="slots">${s.map(x=>`<button class="slot ${x.free?"":"off"}" ${x.free?"":"disabled"} data-book="${r.id}" data-t="${x.t}">${hm(x.t)}</button>`).join("")}</div>`}
     </div></article>`;
 }
 
@@ -306,9 +307,9 @@ function renderResto(id){
       <div class="r-nav"><div class="tablist">${["Aperçu","Expériences","Menu","Photos","Avis","Accès"].filter(x=>x!=="Expériences"||exps.length).map((x,i)=>`<button data-jump="s-${i}-${x}" aria-selected="${i===0}">${x}</button>`).join("")}</div></div>
       <div class="r-sec" data-sec="Aperçu"><h2>À propos</h2><p style="margin-bottom:12px">${r.d}</p>
         <div class="chips" style="margin-bottom:14px">${r.tags.map(t=>`<span class="dish">${t}</span>`).join("")}</div>
-        <dl class="kv"><dt>Horaires</dt><dd>${horairesTxt(r)}</dd><dt>Cuisine</dt><dd>${r.cu}</dd>${r.demo||r.tags.includes("Wave / OM")?`<dt>Paiement</dt><dd>${r.demo?"Espèces, carte":""}${r.tags.includes("Wave / OM")?(r.demo?", ":"")+"Wave, Orange Money, MTN MoMo":""}</dd>`:""}<dt>Capacité</dt><dd>${r.tables} tables · en ligne jusqu'à ${Math.min(SLOTS.maxPers(r),SLOTS.salle(r).reduce((s,t)=>s+t.cap,0))} pers.</dd>${r.demo?`<dt>Tenue</dt><dd>${r.b>=4?"Élégante":"Décontractée"}</dd>`:""}</dl></div>
+        <dl class="kv"><dt>Horaires</dt><dd>${horairesTxt(r)}</dd><dt>Cuisine</dt><dd>${r.cu}</dd>${r.demo||r.tags.includes("Wave / OM")?`<dt>Paiement</dt><dd>${r.demo?"Espèces, carte":""}${r.tags.includes("Wave / OM")?(r.demo?", ":"")+"Wave, Orange Money, MTN MoMo":""}</dd>`:""}${sansResa(r)?"":`<dt>Capacité</dt><dd>${r.tables} tables · en ligne jusqu'à ${Math.min(SLOTS.maxPers(r),SLOTS.salle(r).reduce((s,t)=>s+t.cap,0))} pers.</dd>`}${r.demo?`<dt>Tenue</dt><dd>${r.b>=4?"Élégante":"Décontractée"}</dd>`:""}</dl></div>
       ${exps.length?`<div class="r-sec" data-sec="Expériences"><h2>Expériences</h2><div class="grid">${exps.map(e=>`<div class="exp" style="cursor:default"><span class="when">${e.w}</span><h3>${e.t}</h3><p class="muted small">${e.d}</p><div class="row" style="justify-content:space-between;margin-top:auto"><b>${e.p?F(e.p)+" / pers.":"Entrée libre"}</b><button class="btn sm" data-expbook="${e.id}">Réserver</button></div></div>`).join("")}</div></div>`:""}
-      <div class="r-sec" data-sec="Menu"><h2>Menu</h2><p class="muted small" style="margin-bottom:12px">Prix en FCFA, mis à jour par le restaurant. ${canOrder(r)?"Commande-les à emporter ou en livraison, ou pré-commande-les en réservant.":"Tu peux pré-commander ces plats en réservant."}</p>
+      <div class="r-sec" data-sec="Menu"><h2>Menu</h2><p class="muted small" style="margin-bottom:12px">Prix en FCFA, mis à jour par le restaurant. ${sansResa(r)?"Commande-les à emporter ou en livraison.":canOrder(r)?"Commande-les à emporter ou en livraison, ou pré-commande-les en réservant.":"Tu peux pré-commander ces plats en réservant."}</p>
         <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">${Object.entries(menu).map(([cat,items])=>`<div class="menu-cat"><h3>${cat}</h3>${items.map(([n,p,d])=>`<div class="menu-item"><span>${n}${d?`<small>${d}</small>`:""}</span><b class="num">${p?F(p):"Offert"}</b></div>`).join("")}</div>`).join("")}</div></div>
       ${offresHtml(offres.filter(o=>o.rid===r.id),"Anti-gaspi ce soir","Plats restants à -40 %, à retirer et payer sur place.",true)}
       <div class="r-sec" data-sec="Photos"><h2>Photos</h2>${r.photos&&r.photos.length?`<div class="photos">${r.photos.map(id=>`<div style="background:center/cover no-repeat url(/api/photos/${+id})"></div>`).join("")}</div>`:r.demo?`<div class="photos">${["Salle","Terrasse","Plat signature","Bar","Équipe","Dessert","Vue","Cuisine"].map((p,i)=>`<div style="${coverBg(r,"ph"+i)}">${p}</div>`).join("")}</div>`:`<p class="muted">Pas encore de photos.</p>`}</div>
@@ -338,6 +339,7 @@ function renderWidget(r){
   let times="";for(let m=7*60;m<=23*60+30;m+=30){const t=String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");times+=`<option value="${t}" ${t===st.time?"selected":""}>${hm(t)}</option>`}
   const hasAlert=alerts.some(a=>a.rid===r.id&&a.date===st.date&&a.time===st.time);
   const co=r.commande||{};
+  if(sansResa(r)){w.innerHTML=`<div class="order-cta solo"><h3>Commander</h3><p class="small muted">${[co.emporter&&"À emporter",co.livraison&&"En livraison"].filter(Boolean).join(" ou ")} · prêt en ${+co.delai||30} min environ</p><button class="btn" data-order="${r.id}">Voir la carte et commander</button><p class="small muted">Horaires : ${horairesTxt(r)}. Pas de réservation de table.</p></div>`;return}
   w.innerHTML=`${canOrder(r)?`<div class="order-cta"><h3>Commander</h3><p class="small muted">${[co.emporter&&"À emporter",co.livraison&&"En livraison"].filter(Boolean).join(" ou ")} · prêt en ${+co.delai||30} min environ</p><button class="btn" data-order="${r.id}">Voir la carte et commander</button></div>`:""}<h3>Réserver une table</h3>
     <div class="wf"><div class="field"><label for="wDate">Date</label><input type="date" id="wDate" value="${st.date}" min="${iso(today)}"></div>
       <div class="field"><label for="wTime">Heure</label><select id="wTime">${times}</select></div>
@@ -790,6 +792,7 @@ function renderProExtra(){
           <div class="form"><label>Durée d'un repas (minutes)<input id="f_duree" type="number" min="30" max="300" step="15" value="${SLOTS.duree(d)}"></label><label>Réservation en ligne jusqu'à (personnes)<input id="f_max" type="number" min="1" max="200" value="${SLOTS.maxPers(d)}"></label></div></div></div>
         <div class="panel cfg-order"><h3>6. Commandes en ligne (facultatif)</h3><p class="small muted">Les clients commandent depuis ton menu et paient au retrait ou à la livraison. Tu reçois les commandes dans l'onglet « Commandes ». Tu assures toi-même la livraison.</p>
           <div class="form"><label class="check"><input type="checkbox" id="c_emp" ${d.commande&&d.commande.emporter?"checked":""}> À emporter</label><label class="check"><input type="checkbox" id="c_liv" ${d.commande&&d.commande.livraison?"checked":""}> Livraison</label>
+          <label class="check full"><input type="checkbox" id="c_seul" ${d.commande&&d.commande.seul?"checked":""}> Commande seulement : pas de réservation de table, le plan de salle n'est pas obligatoire</label>
           <label>Frais de livraison (F)<input id="c_frais" type="number" min="0" max="50000" step="100" value="${d.commande?+d.commande.frais||0:1000}"></label><label>Commande minimum (F)<input id="c_min" type="number" min="0" max="500000" step="500" value="${d.commande?+d.commande.min||0:0}"></label><label>Préparation (minutes)<input id="c_delai" type="number" min="5" max="180" step="5" value="${d.commande?+d.commande.delai||30:30}"></label></div></div>
         <p class="err" id="fErr" role="alert" hidden></p><div class="row cfg-actions"><button class="btn ghost" id="fSave">Enregistrer</button>${f.status==="valide"||f.submitted&&f.status==="en_attente"||f.status==="suspendu"?"":`<button class="btn" id="fSubmit">Envoyer pour publication</button>`}<span class="pill ${st[1]}">${st[0]}</span>${f.plan&&PLANS[f.plan]?`<span class="small muted">Offre ${PLANS[f.plan].l} · ${F(PLANS[f.plan].prix)} / mois</span>`:""}</div>`;
       bindFicheForm();bindMenuEditor();
@@ -800,7 +803,7 @@ function renderProExtra(){
       $("#phGrid").onclick=async e=>{const x=e.target.closest("[data-ph]");if(!x)return;try{await api("DELETE","/api/admin/restaurants/"+encodeURIComponent(id)+"/photos/"+x.dataset.ph);f.photos=f.photos.filter(p=>p!==+x.dataset.ph);drawPh();delete ficheCache[id]}catch(er){toast(er.message)}};
       $("#phIn").onchange=async e=>{for(const file of e.target.files){try{const data=await imageVersData(file);const r=await api("POST","/api/admin/restaurants/"+encodeURIComponent(id)+"/photos",{data});f.photos.push(r.id);drawPh()}catch(er){toast(er.message)}}e.target.value="";delete ficheCache[id]};
       const err=m=>{const x=$("#fErr");x.textContent=m;x.hidden=false};
-      const enregistrer=()=>api("PUT","/api/admin/restaurants/"+encodeURIComponent(id),{resto:{...readFiche(),...readConfig(),commande:{emporter:$("#c_emp").checked,livraison:$("#c_liv").checked,frais:+$("#c_frais").value||0,min:+$("#c_min").value||0,delai:+$("#c_delai").value||0}},menu:readMenu()});
+      const enregistrer=()=>api("PUT","/api/admin/restaurants/"+encodeURIComponent(id),{resto:{...readFiche(),...readConfig(),commande:{emporter:$("#c_emp").checked,livraison:$("#c_liv").checked,seul:$("#c_seul").checked,frais:+$("#c_frais").value||0,min:+$("#c_min").value||0,delai:+$("#c_delai").value||0}},menu:readMenu()});
       const apres=async m=>{delete ficheCache[id];await refreshAdminRestos();await loadCatalog();Object.keys(occ).forEach(k=>delete occ[k]);toast(m);renderPro()};
       $("#fSave").onclick=async()=>{$("#fErr").hidden=true;const b=$("#fSave");b.disabled=true;try{await enregistrer();await apres("Fiche enregistrée")}catch(e){err(e.message);b.disabled=false}};
       const sub=$("#fSubmit");if(sub)sub.onclick=async()=>{$("#fErr").hidden=true;sub.disabled=true;try{await enregistrer();await api("POST","/api/admin/restaurants/"+encodeURIComponent(id)+"/soumettre");await apres("Fiche envoyée à l'équipe Tablô")}catch(e){err(e.message);sub.disabled=false}}};

@@ -79,7 +79,8 @@ async function init(){
   /* Exemples ajoutés après le premier démarrage et activation de la commande sur les exemples concernés */
   for(const r of CAT.R.filter(x=>x.commande)){const {m,...data}=r;
     await q("INSERT INTO restaurants(id,data,menu,status,demo) VALUES($1,$2,$3,'valide',true) ON CONFLICT DO NOTHING",[r.id,JSON.stringify(data),JSON.stringify(CAT.MENUS[m]||{})]);
-    await q("UPDATE restaurants SET data=data||jsonb_build_object('commande',$2::jsonb) WHERE id=$1 AND demo AND NOT (data ? 'commande')",[r.id,JSON.stringify(r.commande)])}
+    await q("UPDATE restaurants SET data=data||jsonb_build_object('commande',$2::jsonb) WHERE id=$1 AND demo AND NOT (data ? 'commande')",[r.id,JSON.stringify(r.commande)]);
+    if(r.commande.seul)await q("UPDATE restaurants SET data=jsonb_set(data,'{commande,seul}','true') WHERE id=$1 AND demo AND NOT (data->'commande' ? 'seul')",[r.id])}
   await q("UPDATE restaurants SET plan='premium',submitted=true WHERE demo");
   for(const x of await all("SELECT r.id,r.rid,r.date,r.time,r.pers,o.data FROM reservations r JOIN restaurants o ON o.id=r.rid WHERE r.status IN ('confirmée','honorée') AND r.tables='[]'::jsonb ORDER BY r.id")){
     const occ=await occupation(x.rid,x.date,q);const t=SLOTS.choisir(x.data,x.date,x.time,x.pers,occ)||[SLOTS.salle(x.data)[0].n];
@@ -226,7 +227,7 @@ function validResa(b){const pers=+b.pers;
   if(!TEL.test(normTel(b.tel)))return "Numéro invalide.";return null}
 on("POST","/api/reservations",async(req,res,b)=>{const uid=await needUser(req,res);if(!uid)return;
   const e=validResa(b);if(e)return fail(res,400,e);const rid=str(b.rid,60);if(!rid)return fail(res,400,"Restaurant manquant.");
-  if(!await one("SELECT 1 FROM restaurants WHERE id=$1 AND status='valide'",[rid]))return fail(res,400,"Cet établissement ne prend pas de réservations pour le moment.");
+  if(!await one("SELECT 1 FROM restaurants WHERE id=$1 AND status='valide' AND COALESCE(data->'commande'->>'seul','false')<>'true'",[rid]))return fail(res,400,"Cet établissement ne prend pas de réservations pour le moment.");
   try{const id=await tx(async run=>{
       const tables=await attribuer(run,rid,b);
       let reward=null;
@@ -410,10 +411,10 @@ function cleanConfig(b){const out={};
   if(b.maxPers!==undefined){const m=+b.maxPers;if(!(m>=1&&m<=200))return {err:"Le nombre maximum de personnes doit être entre 1 et 200."};out.maxPers=m}
   if(b.commande&&typeof b.commande==="object"){const c=b.commande,frais=Math.round(+c.frais||0),min=Math.round(+c.min||0),delai=Math.round(+c.delai||0);
     if(!(frais>=0&&frais<=50000))return {err:"Les frais de livraison doivent être entre 0 et 50 000 F."};if(!(min>=0&&min<=500000))return {err:"Le minimum de commande doit être entre 0 et 500 000 F."};if(!(delai>=5&&delai<=180))return {err:"Le délai de préparation doit être entre 5 et 180 minutes."};
-    out.commande={emporter:!!c.emporter,livraison:!!c.livraison,frais,min,delai}}
+    out.commande={emporter:!!c.emporter,livraison:!!c.livraison,frais,min,delai,seul:!!c.seul&&(!!c.emporter||!!c.livraison)}}
   return {data:out}}
 async function manque(id,r){const m=[],d=r.data;if(String(d.d||"").length<20)m.push("une description");if(!FIXE_OK(d.tel))m.push("le téléphone");
-  if(!Object.values(r.menu||{}).flat().length)m.push("le menu");if(!d.salle||!d.salle.length)m.push("le plan de salle");if(!d.services||!d.services.length)m.push("les services");
+  if(!Object.values(r.menu||{}).flat().length)m.push("le menu");if(!(d.commande&&d.commande.seul)&&(!d.salle||!d.salle.length))m.push("le plan de salle");if(!d.services||!d.services.length)m.push("les services");
   if(!await one("SELECT 1 FROM restaurant_photos WHERE rid=$1 LIMIT 1",[id]))m.push("au moins une photo");return m}
 const FIXE_OK=t=>/^[02]\d{9}$/.test(String(t||""));
 const baseUrl=req=>PUBLIC_URL||("http://"+req.headers.host);

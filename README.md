@@ -46,7 +46,7 @@ Ne plus ouvrir `index.html` directement ni avec Live Server : le site a besoin d
 - **Rappel SMS** 2 h avant le repas, une seule fois (contrôle toutes les 5 minutes). Le serveur doit tourner à l'heure d'Abidjan : `TZ=Africa/Abidjan`.
 - **Alerte « table libérée »** : quand un client annule ou est marqué no-show, ceux qui ont activé une alerte reçoivent une notification et un SMS, une seule fois.
 - **Anti-gaspi** : une offre publiée par le restaurant (offres Pro et Premium) apparaît sur l'accueil et sa page. Le client réserve une portion, reçoit un code et paie au retrait. L'offre s'arrête le soir même.
-- **Commandes** : un établissement active « à emporter » et/ou « livraison » dans sa fiche (étape 6). Le client commande depuis le menu, le serveur recalcule les prix et le restaurant fait avancer la commande dans l'onglet « Commandes » (client prévenu par notification et SMS). Le paiement se fait au retrait ou à la livraison ; la livraison est assurée par le restaurant.
+- **Commandes** : un établissement active « à emporter » et/ou « livraison » dans sa fiche (étape 6). Le client commande depuis le menu, le serveur recalcule les prix et le restaurant fait avancer la commande dans l'onglet « Commandes » (client prévenu par notification et SMS). Le paiement se fait au retrait ou à la livraison ; la livraison est assurée par le restaurant. L'option « Commande seulement » retire la réservation de table : c'est le cas des chaînes et fast-foods, et le plan de salle n'est alors plus obligatoire pour publier.
 - **Avis** : un avis par visite confirmée, visible par tous avec le nom masqué (« Aya K. »). Le restaurant peut répondre.
 - **Relevé du mois** : abonnement + clients venus via Tablô. C'est une base de facturation, rien n'est encaissé.
 

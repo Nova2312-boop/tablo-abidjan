@@ -566,3 +566,4 @@ body.is-pro .util,body.is-pro header.top,body.is-pro footer{display:none}
 .stock.cmds .cmd>div:first-child>div{margin-top:5px}
 .cfg-order{margin-top:18px}
 .cfg-order .form{margin-top:10px}
+.order-cta.solo{padding-bottom:0;margin-bottom:0;border-bottom:0}
