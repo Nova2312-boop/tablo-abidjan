@@ -76,6 +76,10 @@ async function init(){
       await q("INSERT INTO restaurants(id,data,menu,status,demo) VALUES($1,$2,$3,'valide',true) ON CONFLICT DO NOTHING",[r.id,JSON.stringify(data),JSON.stringify(CAT.MENUS[m]||{})])}
     console.log(`[seed] ${CAT.R.length} restaurants d'exemple importés`);
   }
+  /* Exemples ajoutés après le premier démarrage et activation de la commande sur les exemples concernés */
+  for(const r of CAT.R.filter(x=>x.commande)){const {m,...data}=r;
+    await q("INSERT INTO restaurants(id,data,menu,status,demo) VALUES($1,$2,$3,'valide',true) ON CONFLICT DO NOTHING",[r.id,JSON.stringify(data),JSON.stringify(CAT.MENUS[m]||{})]);
+    await q("UPDATE restaurants SET data=data||jsonb_build_object('commande',$2::jsonb) WHERE id=$1 AND demo AND NOT (data ? 'commande')",[r.id,JSON.stringify(r.commande)])}
   await q("UPDATE restaurants SET plan='premium',submitted=true WHERE demo");
   for(const x of await all("SELECT r.id,r.rid,r.date,r.time,r.pers,o.data FROM reservations r JOIN restaurants o ON o.id=r.rid WHERE r.status IN ('confirmée','honorée') AND r.tables='[]'::jsonb ORDER BY r.id")){
     const occ=await occupation(x.rid,x.date,q);const t=SLOTS.choisir(x.data,x.date,x.time,x.pers,occ)||[SLOTS.salle(x.data)[0].n];
@@ -119,11 +123,13 @@ const cleanPre=p=>Array.isArray(p)?p.slice(0,40).map(x=>({n:str(x.n,80),q:Math.m
 /* ---------- Sérialisation ---------- */
 const resaOut=(r,mine=true)=>({id:String(r.id),code:r.code,rid:r.rid,date:r.date,time:r.time,pers:r.pers,nom:r.nom,tel:r.tel,booker:r.booker,pay:r.pay,note:r.note||"",occ:r.occ||"",
   pre:r.pre||[],exp:r.exp,reward:r.reward,status:r.status,tables:r.tables||[],mine});
+const cmdOut=c=>({id:String(c.id),code:c.code,rid:c.rid,mode:c.mode,items:c.items,sous_total:c.sous_total,frais:c.frais,total:c.total,adresse:c.adresse,nom:c.nom,tel:c.tel,note:c.note,status:c.status,created:c.created});
 async function mePayload(uid){const u=await one("SELECT * FROM users WHERE id=$1",[uid]);if(!u)return null;
   const resas=(await all("SELECT * FROM reservations WHERE user_id=$1 ORDER BY date,time",[uid])).map(r=>resaOut(r));
   const reviews=await all("SELECT * FROM reviews WHERE user_id=$1 ORDER BY created DESC",[uid]);
   const retraits=await all("SELECT code,rid,plat,prix,date,status FROM retraits WHERE user_id=$1 AND date>=$2 ORDER BY id DESC",[uid,addDays(-1)]);
-  return {retraits,user:{nom:u.nom,tel:u.tel||"",mail:u.mail||"",com:u.com||""},pts:u.pts,favs:u.favs,alerts:u.alerts,redeemed:u.redeemed,notifs:u.notifs,resas,
+  const commandes=(await all("SELECT * FROM commandes WHERE user_id=$1 ORDER BY id DESC LIMIT 30",[uid])).map(cmdOut);
+  return {commandes,retraits,user:{nom:u.nom,tel:u.tel||"",mail:u.mail||"",com:u.com||""},pts:u.pts,favs:u.favs,alerts:u.alerts,redeemed:u.redeemed,notifs:u.notifs,resas,
     myReviews:reviews.map(v=>({rid:v.rid,nom:v.nom,date:v.date,sc:v.sc,txt:v.txt,reply:v.reply,visits:1}))}}
 const pushNotif=(uid,t,d,run=q)=>run(`UPDATE users SET notifs=(jsonb_build_array(jsonb_build_object('t',$2::text,'d',$3::text,'at',$4::bigint,'read',false))||notifs) WHERE id=$1`,[uid,t,d,Date.now()]);
 const addPts=(uid,n,run=q)=>run("UPDATE users SET pts=GREATEST(0,pts+$2) WHERE id=$1",[uid,n]);
@@ -272,6 +278,45 @@ on("POST","/api/offres/reserver",async(req,res,b)=>{const uid=await needUser(req
 on("PATCH","/api/admin/retraits/:id",async(req,res,b,qs,p)=>{const x=await one("SELECT * FROM retraits WHERE id=$1",[+p.id||0]);if(!x)return fail(res,404,"Retrait introuvable.");if(!await needResto(req,res,x.rid))return;
   const st=String(b.status||"");if(!["en_attente","retiré","annulé"].includes(st))return fail(res,400,"Statut invalide.");await q("UPDATE retraits SET status=$2 WHERE id=$1",[x.id,st]);json(res,200,{ok:true})});
 
+/* Commandes à emporter et en livraison. Le serveur recalcule les prix depuis le menu : le navigateur n'envoie que les plats et les quantités. */
+const CMD_SUITE={"reçue":["en préparation","annulée"],"en préparation":["prête","en livraison","annulée"],"prête":["terminée","annulée"],"en livraison":["terminée","annulée"]};
+const CMD_NOTIF={"en préparation":["Commande en préparation","est en préparation"],"prête":["Commande prête","est prête, tu peux venir la retirer"],"en livraison":["Commande en route","est en route"],"terminée":["Commande terminée","est terminée. Merci !"],"annulée":["Commande annulée","a été annulée"]};
+on("POST","/api/commandes",async(req,res,b)=>{const uid=await needUser(req,res);if(!uid)return;
+  const rid=str(b.rid,60),mode=b.mode==="livraison"?"livraison":"emporter";
+  const r=await one("SELECT data,menu,demo,owner_id FROM restaurants WHERE id=$1 AND status='valide'",[rid]);
+  const cfg=r&&r.data.commande;if(!cfg||!cfg[mode])return fail(res,400,mode==="livraison"?"Cet établissement ne livre pas pour le moment.":"Cet établissement ne prend pas de commandes à emporter pour le moment.");
+  const now=new Date(),hhmm=String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0");
+  if(!SLOTS.serviceA(r.data,iso(now),hhmm))return fail(res,409,"L'établissement est fermé pour le moment.");
+  const prix=new Map(Object.values(r.menu||{}).flat().map(x=>[x[0],+x[1]||0]));
+  const qte=new Map();for(const x of (Array.isArray(b.items)?b.items:[]).slice(0,40)){const n=str(x&&x.n,80),k=Math.floor(+(x&&x.q));if(!n||!(k>=1))continue;qte.set(n,Math.min(50,(qte.get(n)||0)+k))}
+  if(!qte.size)return fail(res,400,"Ta commande est vide.");
+  const items=[];for(const [n,k] of qte){if(!(prix.get(n)>0))return fail(res,409,"La carte a changé : « "+n+" » n'est plus disponible.");items.push({n,q:k,p:prix.get(n)})}
+  const sous=items.reduce((s,i)=>s+i.p*i.q,0),frais=mode==="livraison"?(+cfg.frais||0):0;
+  if(sous<(+cfg.min||0))return fail(res,400,"Commande minimum : "+(+cfg.min).toLocaleString("fr-FR")+" F.");
+  const nom=str(b.nom,80),tel=normTel(b.tel),adresse=mode==="livraison"?str(b.adresse,200):"";
+  if(nom.length<2)return fail(res,400,"Indique ton nom.");if(!TEL.test(tel))return fail(res,400,"Numéro invalide : 10 chiffres commençant par 0.");
+  if(mode==="livraison"&&adresse.length<5)return fail(res,400,"Indique l'adresse de livraison (quartier, repère).");
+  if((await one("SELECT COUNT(*)::int AS v FROM commandes WHERE user_id=$1 AND status IN ('reçue','en préparation')",[uid])).v>=5)return fail(res,429,"Tu as déjà 5 commandes en cours. Attends qu'elles soient traitées.");
+  let c=null;for(let i=0;!c;i++){try{c=await one(`INSERT INTO commandes(code,user_id,rid,mode,items,sous_total,frais,total,adresse,nom,tel,note) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      ["CM-"+crypto.randomBytes(3).toString("hex").toUpperCase(),uid,rid,mode,JSON.stringify(items),sous,frais,sous+frais,adresse,nom,tel,str(b.note,300)])}
+    catch(e){if(e.constraint!=="commandes_code_key"||i>=4)throw e}}
+  await pushNotif(uid,"Commande envoyée",`${rname(rid)} · ${(sous+frais).toLocaleString("fr-FR")} F · Code ${c.code}`);
+  bg(msg.orderPlaced(c,rname(rid)));
+  if(!r.demo)bg((async()=>{const o=r.owner_id&&await one("SELECT mail FROM admins WHERE id=$1",[r.owner_id]);await msg.orderNew(r.data.tel,o&&o.mail,c,rname(rid))})());
+  json(res,201,{commande:cmdOut(c),...await mePayload(uid)})});
+on("PATCH","/api/commandes/:id",async(req,res,b,qs,p)=>{const uid=await needUser(req,res);if(!uid)return;if(b.status!=="annulée")return fail(res,400,"Action invalide.");
+  const c=await one("UPDATE commandes SET status='annulée' WHERE id=$1 AND user_id=$2 AND status='reçue' RETURNING *",[+p.id||0,uid]);
+  if(!c)return fail(res,409,"Le restaurant a déjà commencé à la préparer : appelle-le pour l'annuler.");
+  bg(msg.orderStatus(c,rname(c.rid),"annulée"));json(res,200,await mePayload(uid))});
+const commandesDe=async rid=>(await all("SELECT * FROM commandes WHERE rid=$1 AND (status NOT IN ('terminée','annulée') OR created>now()-interval '24 hours') ORDER BY id DESC LIMIT 100",[rid])).map(cmdOut);
+on("GET","/api/admin/commandes",async(req,res,b,qs)=>{const rid=str(qs.get("rid"),60);if(!await needResto(req,res,rid))return;json(res,200,{commandes:await commandesDe(rid)})});
+on("PATCH","/api/admin/commandes/:id",async(req,res,b,qs,p)=>{const x=await one("SELECT * FROM commandes WHERE id=$1",[+p.id||0]);if(!x)return fail(res,404,"Commande introuvable.");if(!await needResto(req,res,x.rid))return;
+  const st=String(b.status||"");const okMode=!(st==="prête"&&x.mode!=="emporter")&&!(st==="en livraison"&&x.mode!=="livraison");
+  if(!(CMD_SUITE[x.status]||[]).includes(st)||!okMode)return fail(res,409,"Cette étape n'est plus possible pour cette commande. Actualise la page.");
+  const c=await one("UPDATE commandes SET status=$2 WHERE id=$1 AND status=$3 RETURNING *",[x.id,st,x.status]);if(!c)return fail(res,409,"Cette commande vient d'être modifiée. Actualise la page.");
+  if(c.user_id)await pushNotif(c.user_id,CMD_NOTIF[st][0],`Ta commande ${c.code} chez ${rname(c.rid)} ${CMD_NOTIF[st][1]}.`);
+  bg(msg.orderStatus(c,rname(c.rid),st));json(res,200,{commandes:await commandesDe(c.rid)})});
+
 /* Avis */
 on("GET","/api/reviews",async(req,res,b,qs)=>{const rid=str(qs.get("rid"),60);
   json(res,200,{reviews:(await all("SELECT rid,nom,date,sc,txt,reply FROM reviews WHERE rid=$1 ORDER BY created DESC LIMIT 50",[rid])).map(v=>({...v,nom:prive(v.nom),visits:1}))})});
@@ -309,7 +354,7 @@ on("GET","/api/admin/resto/:rid",async(req,res,b,qs,p)=>{const rid=decodeURIComp
   const week=await all("SELECT date,SUM(pers)::int AS v FROM reservations WHERE rid=$1 AND date>=$2 AND date<=$3 AND status IN ('confirmée','honorée') GROUP BY date",[rid,addDays(-6),addDays(0)]);
   const top=await all("SELECT p->>'n' AS n,SUM((p->>'q')::int)::int AS v FROM reservations r,jsonb_array_elements(r.pre) p WHERE r.rid=$1 AND r.status<>'annulée' GROUP BY 1 ORDER BY 2 DESC LIMIT 5",[rid]);
   const retraits=await all("SELECT id,code,plat,prix,nom,tel,status FROM retraits WHERE rid=$1 AND date=$2 ORDER BY id DESC",[rid,addDays(0)]);
-  json(res,200,{state:st?st.data:null,resas,week,top,retraits})});
+  json(res,200,{state:st?st.data:null,resas,week,top,retraits,commandes:await commandesDe(rid)})});
 on("PUT","/api/admin/resto/:rid",async(req,res,b,qs,p)=>{const rid=decodeURIComponent(p.rid);if(!await needResto(req,res,rid))return;
   const data=JSON.stringify({rows:b.rows||[],wait:b.wait||[],stock:b.stock||[]});if(data.length>200000)return fail(res,413,"Trop volumineux.");
   await q("INSERT INTO pro_state(rid,data,updated) VALUES($1,$2,now()) ON CONFLICT(rid) DO UPDATE SET data=EXCLUDED.data,updated=now()",[rid,data]);json(res,200,{ok:true})});
@@ -363,6 +408,9 @@ function cleanConfig(b){const out={};
     if(out.services.some(x=>!TIME.test(x.de)||!TIME.test(x.a)||x.de===x.a||!x.jours.length))return {err:"Chaque service doit avoir une heure de début, une heure de fin et au moins un jour."}}
   if(b.duree!==undefined){const d=+b.duree;if(!(d>=30&&d<=300))return {err:"La durée d'un repas doit être entre 30 et 300 minutes."};out.duree=d}
   if(b.maxPers!==undefined){const m=+b.maxPers;if(!(m>=1&&m<=200))return {err:"Le nombre maximum de personnes doit être entre 1 et 200."};out.maxPers=m}
+  if(b.commande&&typeof b.commande==="object"){const c=b.commande,frais=Math.round(+c.frais||0),min=Math.round(+c.min||0),delai=Math.round(+c.delai||0);
+    if(!(frais>=0&&frais<=50000))return {err:"Les frais de livraison doivent être entre 0 et 50 000 F."};if(!(min>=0&&min<=500000))return {err:"Le minimum de commande doit être entre 0 et 500 000 F."};if(!(delai>=5&&delai<=180))return {err:"Le délai de préparation doit être entre 5 et 180 minutes."};
+    out.commande={emporter:!!c.emporter,livraison:!!c.livraison,frais,min,delai}}
   return {data:out}}
 async function manque(id,r){const m=[],d=r.data;if(String(d.d||"").length<20)m.push("une description");if(!FIXE_OK(d.tel))m.push("le téléphone");
   if(!Object.values(r.menu||{}).flat().length)m.push("le menu");if(!d.salle||!d.salle.length)m.push("le plan de salle");if(!d.services||!d.services.length)m.push("les services");

@@ -69,6 +69,12 @@ const msg={
   reminder(r,rname){return sendSms(r.tel,`Tablô : rappel, ta table chez ${rname} t'attend à ${hm(r.time)} (${r.pers} pers.). Code ${r.code}. Empêchement ? Annule dans Mon compte.`)},
   tableFreed(tel,rname,date,time){return sendSms(tel,`Tablô : une table s'est libérée chez ${rname}, ${fmtDate(date)} à ${hm(time)}. Réserve vite sur Tablô.`)},
   pickup(r,rname){return sendSms(r.tel,`Tablô : portion réservée chez ${rname} : ${r.plat}, ${r.prix} F à payer au retrait ce soir. Code ${r.code}.`)},
+  orderPlaced(c,rname){const mode=c.mode==="livraison"?"à payer à la livraison":"à payer au retrait";return sendSms(c.tel,`Tablô : commande ${c.code} reçue par ${rname}. Total ${c.total} F, ${mode}. Suis-la dans Mon compte.`)},
+  orderNew(tel,mail,c,rname){const lignes=c.items.map(i=>i.q+" x "+i.n).join(", "),mode=c.mode==="livraison"?"Livraison : "+c.adresse:"À emporter";const jobs=[];
+    if(/^0[157]\d{8}$/.test(String(tel||"")))jobs.push(sendSms(tel,`Tablô : nouvelle commande ${c.code}, ${c.total} F. ${mode}. A traiter dans l'espace restaurateur.`));
+    if(mail)jobs.push(sendMail(mail,`Nouvelle commande ${c.code} · ${rname}`,`<p><b>${esc(lignes)}</b></p><p>${esc(mode)}<br>Client : ${esc(c.nom)} · ${esc(c.tel)}${c.note?"<br>Note : "+esc(c.note):""}</p><p style="font-size:22px;font-weight:bold">${c.total} F</p><p>À traiter dans l'espace restaurateur, onglet « Commandes ».</p>`));
+    return Promise.all(jobs)},
+  orderStatus(c,rname,status){const t={"prête":`ta commande ${c.code} est prête chez ${rname}. Total ${c.total} F à payer au retrait.`,"en livraison":`ta commande ${c.code} de ${rname} est en route. Total ${c.total} F à payer à la livraison.`,"annulée":`ta commande ${c.code} chez ${rname} est annulée.`}[status];return t?sendSms(c.tel,"Tablô : "+t):Promise.resolve()},
   proReset(mail,nom,url){return sendMail(mail,"Nouveau mot de passe Tablô",`<p>Bonjour ${esc(nom)},</p><p>Clique ici pour choisir un nouveau mot de passe :</p><p><a href="${esc(url)}" style="display:inline-block;background:#DA3743;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:bold">Choisir mon mot de passe</a></p><p>Ce lien expire dans 1 heure. Si tu n'as rien demandé, ignore cet e-mail.</p>`)},
   /* Établissements */
   proLeadReceived(mail,nom,resto){return sendMail(mail,`Demande reçue · ${resto}`,`<p>Bonjour ${esc(nom)},</p>

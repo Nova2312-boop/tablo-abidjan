@@ -542,3 +542,27 @@ body.is-pro .util,body.is-pro header.top,body.is-pro footer{display:none}
 .profil{display:flex;flex-direction:column;gap:3px;text-align:left;width:100%;border:2px solid var(--line);border-radius:10px;background:var(--surface);padding:16px;color:var(--fg)}
 .profil b{font-size:16px}.profil span{font-size:14px;color:var(--muted)}
 .profil:hover{border-color:var(--lagune)}
+
+/* Commandes à emporter et en livraison */
+#oAdrL[hidden],.kpis[hidden]{display:none}
+.card-order{width:100%;margin-top:4px}
+.order-cta{display:flex;flex-direction:column;gap:6px;padding-bottom:14px;margin-bottom:2px;border-bottom:1px solid var(--line)}
+.order-note{background:var(--sunk);border-radius:8px;padding:9px 11px;font-size:13px;margin-bottom:10px}
+.order-note.warn{color:var(--warn);font-weight:600}
+.order-menu{margin:12px 0}
+.order-menu h3{font-size:15px;margin:14px 0 2px}
+.order-item{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;border-bottom:1px dashed var(--line)}
+.order-item>span:first-child{min-width:0}
+.order-item small{display:block;color:var(--muted)}
+.order-item b.num{display:block;font-size:13px}
+.order-item .qty{flex:none}
+.order-item .qty b{min-width:18px;text-align:center}
+.order-sum{display:grid;grid-template-columns:1fr auto;gap:4px 12px;background:var(--sunk);border-radius:12px;padding:12px;margin:12px 0;font-size:14px}
+.order-sum .tot{font-weight:800;font-size:15px}
+.order-sum .min{grid-column:1/-1;color:var(--warn);font-weight:600;font-size:13px}
+#oGo{width:100%}
+.stock.cmds li.cmd{align-items:flex-start;gap:12px;flex-wrap:wrap}
+.stock.cmds .cmd>div:first-child{flex:1 1 240px;display:block}
+.stock.cmds .cmd>div:first-child>div{margin-top:5px}
+.cfg-order{margin-top:18px}
+.cfg-order .form{margin-top:10px}

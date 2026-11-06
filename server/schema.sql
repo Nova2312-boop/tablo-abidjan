@@ -168,3 +168,24 @@ ALTER TABLE leads ADD COLUMN IF NOT EXISTS entretien_lieu TEXT;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS entretien_mode TEXT NOT NULL DEFAULT 'sur_place';
 ALTER TABLE leads DROP CONSTRAINT IF EXISTS leads_status_check;
 ALTER TABLE leads ADD CONSTRAINT leads_status_check CHECK (status IN ('nouveau','contacte','entretien','entretien_fait','compte_cree','refuse'));
+
+-- ---------- Commandes à emporter et en livraison (payées au retrait ou à la livraison) ----------
+CREATE TABLE IF NOT EXISTS commandes (
+  id          SERIAL PRIMARY KEY,
+  code        TEXT UNIQUE NOT NULL,
+  user_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  rid         TEXT NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+  mode        TEXT NOT NULL CHECK (mode IN ('emporter','livraison')),
+  items       JSONB NOT NULL,                     -- [{n,q,p}] : prix relevés sur le menu au moment de la commande
+  sous_total  INTEGER NOT NULL,
+  frais       INTEGER NOT NULL DEFAULT 0,
+  total       INTEGER NOT NULL,
+  adresse     TEXT NOT NULL DEFAULT '',
+  nom         TEXT NOT NULL,
+  tel         TEXT NOT NULL,
+  note        TEXT NOT NULL DEFAULT '',
+  status      TEXT NOT NULL DEFAULT 'reçue' CHECK (status IN ('reçue','en préparation','prête','en livraison','terminée','annulée')),
+  created     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS commandes_rid ON commandes (rid, created);
+CREATE INDEX IF NOT EXISTS commandes_user ON commandes (user_id);
