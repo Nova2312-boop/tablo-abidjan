@@ -567,17 +567,20 @@ function logoutUser(){api("POST","/api/auth/logout").catch(()=>{}).finally(()=>{
 /* Première question : client ou gérant ? Se déclarer gérant ne donne aucun accès : demande et validation restent obligatoires. */
 function openProfil(){
   openDlg("Bienvenue sur Tablô",`<div class="login"><h3>Tu viens pour quoi ?</h3>
-    <button type="button" class="profil" id="pfClient"><b>Je veux réserver une table</b><span>Trouve un restaurant, réserve et cumule des points.</span></button>
+    <button type="button" class="profil" id="pfCompte"><b>J'ai déjà un compte</b><span>Connecte-toi avec ton numéro ou ton e-mail : tu retrouves tes réservations, tes favoris et tes points.</span></button>
+    <button type="button" class="profil" id="pfClient"><b>Je veux réserver une table</b><span>Crée ton compte en 1 minute, réserve et cumule des points.</span></button>
     <button type="button" class="profil" id="pfGerant"><b>Je gère un établissement</b><span>Restaurant, maquis ou lounge : fais ta demande pour rejoindre Tablô.</span></button></div>`);
+  $("#pfCompte").onclick=()=>openLogin(false,true,true);
   $("#pfClient").onclick=()=>openLogin(false,true);
   $("#pfGerant").onclick=()=>{dlg.close();if(location.hash==="#inscription-resto")route();else location.hash="inscription-resto"};
 }
-function openLogin(join=false,retour=false){
+function openLogin(join=false,retour=false,existant=false){
   const L={mode:"tel",val:"",demo:"",signup:""};
   const flag=`<span class="flag-ci" aria-hidden="true"><i></i><i></i><i></i></span>`;
   const busy=(b,on,txt)=>{b.disabled=on;if(txt)b.textContent=txt};
   const showErr=m=>{const e=$("#lgErr");e.textContent=m;e.hidden=false};
-  function step1(){openDlg(join?"Rejoindre Tablô Récompenses":"Connexion",`<div class="login">
+  function step1(){openDlg(join?"Rejoindre Tablô Récompenses":existant?"Se connecter":"Créer mon compte",`<div class="login">
+    ${existant?`<p class="muted">Content de te revoir ! Utilise le numéro ou l'e-mail de ton compte.</p>`:""}
     <h3>${L.mode==="tel"?"Entre ton numéro de téléphone":"Entre ton adresse e-mail"}</h3>
     <p class="muted">${L.mode==="tel"?"Tu vas recevoir un SMS pour vérifier ton compte. Des frais d'opérateur peuvent s'appliquer.":"Tu vas recevoir un code par e-mail pour vérifier ton compte."}</p>
     ${L.mode==="tel"?`<div class="tel-row"><span class="cc">${flag}<span>+225</span></span><input id="lgVal" inputmode="tel" autocomplete="tel" placeholder="07 12 34 56 78" aria-label="Numéro de téléphone" value="${esc(L.val)}"></div>`:`<input class="lg-in" id="lgVal" type="email" autocomplete="email" placeholder="aya.kone@email.ci" aria-label="Adresse e-mail" value="${esc(L.val)}">`}
@@ -606,10 +609,14 @@ function openLogin(join=false,retour=false){
     let pending=false;
     const verify=async()=>{if(pending)return;const v=c.value.trim();if(v.length!==6)return showErr("Le code contient 6 chiffres.");pending=true;busy($("#lgVerify"),true,"Vérification…");
       try{const d=await api("POST","/api/auth/verify",{ident:L.val,code:v});
-        if(d.needsProfile){L.signup=d.signup;step3();return}
+        if(d.needsProfile){L.signup=d.signup;if(existant)return aucunCompte();step3();return}
         applyMe(d);if(user.com){st.commune=user.com;st.quartier=null}save();renderLoc();dlg.close();toast("Bon retour "+user.nom.split(" ")[0]+" !");rerender()}
       catch(e){pending=false;busy($("#lgVerify"),false,"Vérifier");showErr(e.message)}};
     $("#lgVerify").onclick=verify;c.onkeydown=e=>{if(e.key==="Enter")verify()};c.oninput=()=>{if(c.value.trim().length===6)verify()}}
+  function aucunCompte(){const shown=L.mode==="tel"?"+225 "+L.val.replace(/(\d{2})(?=\d)/g,"$1 "):L.val;
+    openDlg("Aucun compte trouvé",`<div class="login"><h3>Aucun compte avec ${esc(shown)}</h3><p class="muted">Tu t'es peut-être inscrit avec un autre numéro ou un autre e-mail.</p>
+    <button class="btn lg-go" id="acOther">Essayer un autre ${L.mode==="tel"?"numéro":"e-mail"}</button><button class="btn ghost lg-go" id="acNew">Créer un compte avec ${esc(shown)}</button></div>`);
+    $("#acOther").onclick=()=>{L.val="";step1()};$("#acNew").onclick=()=>step3()}
   function step3(){openDlg("Crée ton profil",`<div class="login"><h3>Bienvenue sur Tablô !</h3><p class="muted">Dernière étape : comment doit-on t'appeler ?</p>
     <div class="form"><label class="full">Nom complet<input id="lgNom" autocomplete="name" placeholder="Aya Koné"></label>
     ${L.mode==="mail"?`<label class="full">Téléphone (pour les rappels SMS)<input id="lgTel" inputmode="tel" placeholder="07 12 34 56 78"></label>`:""}
