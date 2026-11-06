@@ -1,6 +1,14 @@
 /* Tablô Abidjan — logique de l'application (routage, vues, réservation, compte, espace resto). */
 (function(){
 "use strict";
+/* Deux sites à part : le site client (/) et l'espace admin et gérant (/admin). Chaque lien renvoie vers le bon. */
+const SITE_ADMIN=location.pathname.replace(/\/+$/,"")==="/admin";
+function changeSite(){const h=location.hash.slice(1);
+  if(SITE_ADMIN){if(h&&h!=="pro"&&!h.startsWith("activer-")){location.replace("/"+location.hash);return true}}
+  else if(h==="pro"||h.startsWith("activer-")){location.replace("/admin"+(h==="pro"?"":location.hash));return true}
+  return false}
+if(changeSite())return;
+if(SITE_ADMIN)document.title="Tablô · Espace gérant";
 /* ---------- HELPERS ---------- */
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -198,7 +206,7 @@ function renderHome(){
       <div><h4>Quartiers</h4>${COMMUNES[c].q.map(q=>`<button data-dc="${c}" data-dq="${q}">${q}</button>`).join("")}</div>
     </div></div></details>`).join("")}</div></section>
   <div class="wrap"><div class="pro-banner">
-    <div class="txt"><span class="pill" style="background:rgba(255,255,255,.18);color:#fff">Restaurateurs</span><h2>Remplis ta salle, réduis les no-shows et le gaspillage.</h2><p>Plan de salle en temps réel, pré-commandes envoyées en cuisine, rappels SMS automatiques et vente des invendus du soir à prix réduit.</p><a class="btn" href="#inscription-resto">Rejoindre Tablô</a> <a class="btn ghost" href="#pro" style="color:#fff;border-color:rgba(255,255,255,.5)">Espace partenaire</a></div>
+    <div class="txt"><span class="pill" style="background:rgba(255,255,255,.18);color:#fff">Restaurateurs</span><h2>Remplis ta salle, réduis les no-shows et le gaspillage.</h2><p>Plan de salle en temps réel, pré-commandes envoyées en cuisine, rappels SMS automatiques et vente des invendus du soir à prix réduit.</p><a class="btn" href="#inscription-resto">Rejoindre Tablô</a> </div>
     <div class="mock" aria-hidden="true">${Array.from({length:12},(_,i)=>`<span class="${[1,4,6,9].includes(i)?"b":""}">T${i+1}</span>`).join("")}</div>
   </div></div>
   <div class="wrap app-band">
@@ -673,7 +681,7 @@ function openLogin(join=false,retour=false,existant=false){
 function renderAdminLogin(){
   $("#main").innerHTML=`<div class="adm-login"><div class="adm-card">
     <a class="logo" href="#accueil" aria-label="Tablô, retour au site client"><span class="logo-mark"></span><span><b>Tablô</b><small>Espace restaurateur</small></span></a>
-    <div><h1>Connexion administrateur</h1><p class="muted">Gère tes réservations, ta salle et tes invendus.</p></div>
+    <div><h1>Connexion à ton espace</h1><p class="muted">Gère tes réservations, ta salle et tes invendus.</p></div>
     <form id="admForm" class="adm-form" novalidate>
       <label>Adresse e-mail<input id="admMail" type="email" autocomplete="username" placeholder="ton@email.ci" required></label>
       <label>Mot de passe<span class="pw"><input id="admPass" type="password" autocomplete="current-password" placeholder="••••••••" required><button type="button" id="admEye" aria-label="Afficher le mot de passe">Afficher</button></span></label>
@@ -827,17 +835,20 @@ function renderProExtra(){
         ${l.map(x=>`<tr><td><b>${esc(x.resto)}</b><div class="small muted">${esc(x.type)} · ${esc(x.commune)}${x.tables?" · "+(+x.tables)+" tables":""}</div>${x.message?`<div class="small">« ${esc(x.message)} »</div>`:""}</td>
           <td>${esc(x.gerant)}<div class="small"><a href="tel:${esc(x.tel)}">${esc(x.tel)}</a></div><div class="small muted">${esc(x.mail)}</div></td>
           <td class="small num">${new Date(x.created).toLocaleDateString("fr-FR")}</td><td><span class="pill ${L[x.status][1]}">${L[x.status][0]}</span>${x.status==="entretien"&&x.entretien_at?`<div class="small"><b>${x.entretien_mode==="appel"?"Appel":"Entretien"}</b> · ${esc(quandTxt(x.entretien_at))}<br><span class="muted">${esc(x.entretien_lieu||"")}</span></div>`:""}</td>
-          <td>${x.status==="compte_cree"?`<span class="small muted">${PLANS[x.plan]?PLANS[x.plan].l:""}</span>`:x.status==="refuse"?`<button class="btn ghost sm" data-ls="nouveau" data-id="${+x.id}">Rouvrir</button>`:`<div class="acts">${x.status==="entretien_fait"?`<select class="plain" data-plan="${+x.id}" aria-label="Offre">${Object.entries(PLANS).map(([k,p])=>`<option value="${k}" ${k===x.plan?"selected":""}>${p.l}</option>`).join("")}</select><button class="btn green sm" data-make="${+x.id}">Créer le compte</button>`:x.status==="entretien"?`<button class="btn green sm" data-ls="entretien_fait" data-id="${+x.id}">Échange réalisé</button><button class="btn ghost sm" data-plani="${+x.id}">Reporter</button>`:`<button class="btn green sm" data-plani="${+x.id}">Planifier un échange</button>${x.status==="nouveau"?`<button class="btn ghost sm" data-ls="contacte" data-id="${+x.id}">Contacté</button>`:""}`}<button class="btn ghost sm" data-ls="refuse" data-id="${+x.id}">Refuser</button></div>`}</td></tr>`).join("")}
+          <td>${x.status==="compte_cree"?`<div class="acts"><span class="small muted">${PLANS[x.plan]?PLANS[x.plan].l:""}</span><button class="btn ghost sm" data-relink="${+x.id}">Renvoyer le lien</button></div>`:x.status==="refuse"?`<button class="btn ghost sm" data-ls="nouveau" data-id="${+x.id}">Rouvrir</button>`:`<div class="acts">${x.status==="entretien_fait"?`<select class="plain" data-plan="${+x.id}" aria-label="Offre">${Object.entries(PLANS).map(([k,p])=>`<option value="${k}" ${k===x.plan?"selected":""}>${p.l}</option>`).join("")}</select><button class="btn green sm" data-make="${+x.id}">Créer le compte</button>`:x.status==="entretien"?`<button class="btn green sm" data-ls="entretien_fait" data-id="${+x.id}">Échange réalisé</button><button class="btn ghost sm" data-plani="${+x.id}">Reporter</button>`:`<button class="btn green sm" data-plani="${+x.id}">Planifier un échange</button>${x.status==="nouveau"?`<button class="btn ghost sm" data-ls="contacte" data-id="${+x.id}">Contacté</button>`:""}`}<button class="btn ghost sm" data-ls="refuse" data-id="${+x.id}">Refuser</button></div>`}</td></tr>`).join("")}
         </tbody></table></div></div>`:'<div class="empty">Aucune demande pour le moment.</div>';
       body.querySelectorAll("[data-ls]").forEach(b=>b.onclick=()=>api("PATCH","/api/admin/leads/"+b.dataset.id,{status:b.dataset.ls}).then(load).catch(e=>toast(e.message)));
       body.querySelectorAll("[data-plani]").forEach(b=>b.onclick=()=>{const x=l.find(y=>y.id===+b.dataset.plani);
         openDlg("Échange · "+esc(x.resto),`<div class="form"><label class="full">Format<select id="enMode"><option value="sur_place" ${x.entretien_mode==="appel"?"":"selected"}>Entretien sur place</option><option value="appel" ${x.entretien_mode==="appel"?"selected":""}>Appel téléphonique</option></select></label><label class="full">Date et heure<input id="enQuand" type="datetime-local" value="${esc(x.entretien_at||"")}"></label><label class="full" id="enLieuL">Lieu<input id="enLieu" maxlength="200" value="${esc(x.entretien_lieu||store.get("enLieu",""))}" placeholder="Adresse de nos bureaux, ou sur place dans l'établissement"></label></div><p class="small muted">${esc(x.gerant)} sera prévenu par SMS et par e-mail.</p><p class="err" id="enErr" hidden></p><button class="btn" id="enOk">Prévenir le gérant</button>`);
         const majMode=()=>{$("#enLieuL").hidden=$("#enMode").value==="appel"};$("#enMode").onchange=majMode;majMode();
         $("#enOk").onclick=async()=>{const e=$("#enErr");e.hidden=true;try{await api("POST","/api/admin/leads/"+x.id+"/entretien",{mode:$("#enMode").value,quand:$("#enQuand").value,lieu:$("#enLieu").value});if($("#enMode").value!=="appel")store.set("enLieu",$("#enLieu").value);dlg.close();toast("Échange planifié, gérant prévenu");load()}catch(er){e.textContent=er.message;e.hidden=false}}});
+      const lienDlg=(titre,d)=>{openDlg(titre,`<p>Le lien d'activation part par e-mail à <b>${esc(d.mail)}</b> si l'envoi est configuré. Tu peux aussi le transmettre par WhatsApp :</p><input class="lg-in" id="actUrl" readonly value="${esc(d.url)}"><div class="row" style="margin-top:12px"><button class="btn" id="actCopy">Copier le lien</button><button class="btn ghost" data-close>Fermer</button></div>`);
+          inner.querySelectorAll("[data-close]").forEach(c=>c.onclick=()=>dlg.close());$("#actCopy").onclick=()=>{$("#actUrl").select();navigator.clipboard&&navigator.clipboard.writeText(d.url);toast("Lien copié")}};
+      body.querySelectorAll("[data-relink]").forEach(b=>b.onclick=async()=>{const x=l.find(y=>y.id===+b.dataset.relink);if(!confirm("Envoyer un nouveau lien à "+x.mail+" ? L'ancien lien ne fonctionnera plus."))return;b.disabled=true;
+        try{lienDlg("Nouveau lien d'activation",await api("POST","/api/admin/leads/"+b.dataset.relink+"/lien",{}))}catch(e){toast(e.message)}b.disabled=false});
       body.querySelectorAll("[data-make]").forEach(b=>b.onclick=async()=>{b.disabled=true;
         try{const d=await api("POST","/api/admin/leads/"+b.dataset.make+"/compte",{plan:body.querySelector('[data-plan="'+b.dataset.make+'"]').value});await refreshAdminRestos();
-          openDlg("Compte créé",`<p>Le lien d'activation part par e-mail à <b>${esc(d.mail)}</b> si l'envoi est configuré. Tu peux aussi le transmettre par WhatsApp :</p><input class="lg-in" id="actUrl" readonly value="${esc(d.url)}"><div class="row" style="margin-top:12px"><button class="btn" id="actCopy">Copier le lien</button><button class="btn ghost" data-close>Fermer</button></div>`);
-          inner.querySelectorAll("[data-close]").forEach(c=>c.onclick=()=>dlg.close());$("#actCopy").onclick=()=>{$("#actUrl").select();navigator.clipboard&&navigator.clipboard.writeText(d.url);toast("Lien copié")};load()}
+          lienDlg("Compte créé",d);load()}
         catch(e){b.disabled=false;toast(e.message)}})
     }).catch(onErr);load()}
   if(proTab==="etabs"){
@@ -881,7 +892,7 @@ function renderProRegister(){
       <label class="full">Message (facultatif)<textarea id="l_msg" rows="2" maxlength="800" placeholder="Le meilleur moment pour t'appeler, tes questions…"></textarea></label></div>
     <p class="err" id="rErr" role="alert" hidden></p>
     <button class="btn" id="rSend">Envoyer ma demande</button>
-    <p class="small muted" style="text-align:center">Déjà partenaire ? <a href="#pro">Se connecter à mon espace</a></p>
+    <p class="small muted" style="text-align:center">Déjà partenaire ? <a href="/admin">Se connecter à mon espace</a></p>
     <a class="adm-back" href="#accueil">← Retour au site client</a></div></div>`;
   $("#plans").onclick=e=>{const b=e.target.closest("[data-plan]");if(!b)return;plan=b.dataset.plan;document.querySelectorAll("#plans .plan").forEach(x=>x.setAttribute("aria-pressed",x===b))};
   $("#rSend").onclick=async()=>{const err=$("#rErr"),b=$("#rSend");err.hidden=true;b.disabled=true;b.textContent="Envoi…";
@@ -1027,9 +1038,10 @@ function renderPro(){
 }
 
 /* ---------- ROUTER & GLOBAL EVENTS ---------- */
-function view(){const h=(location.hash||"#accueil").slice(1);if(h.startsWith("r-"))return"resto";if(h.startsWith("activer-"))return"activer";return["accueil","explorer","compte","pro","inscription-resto"].includes(h)?h:"accueil"}
+function view(){const h=(location.hash||(SITE_ADMIN?"#pro":"#accueil")).slice(1);if(h.startsWith("r-"))return"resto";if(h.startsWith("activer-"))return"activer";return["accueil","explorer","compte","pro","inscription-resto"].includes(h)?h:"accueil"}
 function rerender(keepScroll=true){const y=scrollY;route(false);if(keepScroll)window.scrollTo(0,y)}
 function route(top=true){
+  if(changeSite())return;
   const v=view();document.body.classList.toggle("is-pro",["pro","inscription-resto","activer"].includes(v));document.querySelectorAll("nav.tabs a").forEach(a=>{if(a.dataset.view===v||(v==="resto"&&a.dataset.view==="explorer"))a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
   if(v==="accueil")renderHome();if(v==="explorer")renderExplorer();if(v==="compte")user?renderAccount():renderAccountGate();if(v==="pro")admin?renderPro():renderAdminLogin();if(v==="inscription-resto")renderProRegister();if(v==="activer")renderActivation(location.hash.slice(9));
   if(v==="resto")renderResto(location.hash.slice(3));

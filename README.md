@@ -19,7 +19,7 @@ Prérequis : **Node.js 18+** et **PostgreSQL** (testé avec PostgreSQL 18).
    ```
 4. Ouvre :
    - Site client : http://localhost:3000
-   - Espace restaurateur (admin) : http://localhost:3000/#pro
+   - Espace restaurateur (admin) : http://localhost:3000/admin
 
 Les tables sont créées automatiquement au premier démarrage (`server/schema.sql`), avec un admin et un client de démo.
 Ne plus ouvrir `index.html` directement ni avec Live Server : le site a besoin du serveur pour l'API.
@@ -27,7 +27,7 @@ Ne plus ouvrir `index.html` directement ni avec Live Server : le site a besoin d
 ## Comptes de démo
 
 - **Client** : numéro `07 00 00 00 00` (Aya Koné, 650 pts, réservations d'exemple), ou n'importe quel autre numéro pour créer un compte. En mode démo, le code SMS s'affiche à l'écran.
-- **Administrateur** : http://localhost:3000/#pro avec `admin@tablo.ci` / `Tablo2026!` (modifiable dans `.env` avant le premier démarrage).
+- **Administrateur** : http://localhost:3000/admin avec `admin@tablo.ci` / `Tablo2026!` (modifiable dans `.env` avant le premier démarrage).
 
 ## Rejoindre Tablô (parcours restaurateur)
 
@@ -81,7 +81,7 @@ tablo-abidjan/
 | `#explorer` | Résultats filtrés, vue liste ou carte d'Abidjan |
 | `#r-<id>` | Fiche restaurant (ex. `#r-kaya`) : menu, photos, avis, accès, réservation |
 | `#compte` | Réservé aux clients connectés : réservations, historique, favoris, alertes, fidélité |
-| `#pro` | Réservé aux admins : service et salle, cuisine et anti-gaspillage, statistiques |
+| `/admin` | Site à part pour les gérants et l'équipe Tablô : service et salle, cuisine et anti-gaspillage, statistiques |
 
 ## Backend
 
